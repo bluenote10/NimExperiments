@@ -116,7 +116,7 @@ FAILURE
 
 when true:
 
-  iterator infinite(): int {.closure.} = # not using closures causes type mismatch
+  iterator infinite(): int = # {.closure.} = # not using closures causes type mismatch
     var i = 0
     while true:
       yield i
@@ -136,7 +136,13 @@ when true:
           inc i
     tmp
 
-  for x in infinite.take(10)():
+
+  template closureIterator[T](iter: iterator(): T): auto {.immediate.} =
+    (iterator(): type(iter()) =
+      for item in iter: yield item)  
+    
+  #for x in infinite.take(10)():
+  for x in closureIterator(infinite):
     echo x
     
   discard """

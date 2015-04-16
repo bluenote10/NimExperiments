@@ -1,7 +1,9 @@
 #!/bin/bash
 
-file=iterate.nim
+#file=iterate.nim
 #file=repeatedIteratorUse.nim
+file=macroTest.nim
+#file=parseExpr.nim
 
 fileAbs=`readlink -m $file`
 traceback=false
