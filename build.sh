@@ -2,15 +2,19 @@
 
 #file=iterate.nim
 #file=repeatedIteratorUse.nim
-file=macroTest.nim
+#file=macroTest.nim
 #file=parseExpr.nim
+file=threadLocalGC.nim
 
 fileAbs=`readlink -m $file`
 traceback=false
 
 #nim c -r -o:bin/test $file
 
-nim c -r -o:bin/test --parallelBuild:1 $file
+#nim c -r -o:bin/test --parallelBuild:1 $file
+
+nim c -r -o:bin/test --parallelBuild:1 --threads:on $file
+
 
 if [ "$traceback" = true ] ; then
   echo -e "\nRunning ./koch temp c $fileAbs"
