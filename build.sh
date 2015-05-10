@@ -6,7 +6,8 @@
 #file=parseExpr.nim
 #file=threadLocalGC.nim
 #file=backgroundjob.nim
-file=basicTypes.nim
+#file=basicTypes.nim
+file=reprBug.nim
 
 fileAbs=`readlink -m $file`
 traceback=false

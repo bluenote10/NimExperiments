@@ -100,8 +100,13 @@ proc getData(p: Person) =
   #echo p.addr
   #echo "Addr of name in proc: ", repr(p.name.addr)
   #echo "Addr of name in proc: ", repr(addr(p.name))
-  discard
+  var name: string
+  shallowCopy name, p.name
+  echo "Addr of name in proc: ", repr(addr(name))
+  
 
-#echo "Addr of stackPerson1: ", repr(stackPerson.addr)
-#echo "Addr of stackPerson.name ", repr(stackPerson.name.addr)
+var tmpStackPerson: Person
+shallowCopy tmpStackPerson, stackPerson
+echo "Addr of stackPerson1: ", repr(tmpStackPerson.addr)
+echo "Addr of stackPerson.name ", repr(tmpStackPerson.name.addr)
 getData(stackPerson)
