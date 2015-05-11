@@ -72,7 +72,7 @@ const
 
 type
   ParseState = enum
-    psNeutral, psDollar, psIdent, psExpr
+    psNeutral, psOneDollar, psIdent, psExpr
 
 proc isValidExpr(s: string): bool {.compileTime.} =
   try:
@@ -80,55 +80,81 @@ proc isValidExpr(s: string): bool {.compileTime.} =
     return true
   except ValueError:
     return false
-    
-iterator parseFormatString(s: string): string =
 
-  var state = psNeutral
-  var buffer = ""
+
+
+macro format(s: string): stmt =
+
+  # An iterator itself cannot be {.compileTime.}
+  # This is required to call isValidExpr (parseExpr)
+  # to avoid manual parsing of {}-expressions.
+  # Solution: An iterator can be nested in any
+  # {.compileTime.} proc / template / macro
+  iterator parseFormatString(s: string): string =
+
+    var state = psNeutral
+    var buffer = ""
+
+    for i, c in s:
+      echo c, " state: ", state
+      case state
+
+      of psNeutral:
+        if c == '$':
+          echo "yielding ", buffer
+          yield buffer
+          buffer.setlen(0)
+          state = psOneDollar
+        else:
+          buffer.add(c)
+
+      of psOneDollar:
+        if c == '$':                  # second dollar -> yield "$", return to neutral
+          echo "yielding $"
+          yield "$"
+          state = psNeutral
+        elif c == '{':
+          state = psExpr
+        elif c in IdentStartChars:
+          state = psIdent
+          buffer.add(c)
+        else:
+          error "a '$' character must either be followed by '$', an identifier, or a {} expression"
+
+      of psIdent:
+        if c in IdentChars:
+          buffer.add(c)
+        else:
+          echo "yielding ", buffer
+          yield buffer
+          buffer.setlen(0)
+          state = psNeutral
+
+      of psExpr:
+        echo "current expr: ", buffer
+        if c == '}' and buffer.isValidExpr:
+          echo "yielding ", buffer
+          echo "yielding ", parseExpr(buffer).toStrLit.strVal
+          yield parseExpr(buffer).strVal
+          buffer.setlen(0)
+          state = psNeutral
+        else:
+          buffer.add(c)
+
+  echo "Parsing s = ", s
+
+  for x in parseFormatString(s.strVal):
+    echo "iterator yielded: ", x
+
+  result = quote do:
+    echo "Hello World"
   
-  for i, c in s:
-    echo c, " state: ", state
-    case state
-
-    of psNeutral:
-      if c == '$':
-        yield buffer
-        buffer.setlen(0)
-        state = psDollar
-      else:
-        buffer.add(c)
-
-    of psDollar:
-      if c == '$':
-        yield "$"
-        state = psNeutral
-      elif c == '{':
-        state = psExpr
-      elif c in IdentStartChars:
-        state = psIdent
-        buffer.add(c)
-
-    of psIdent:
-      if c in IdentChars:
-        buffer.add(c)
-      else:
-        yield buffer
-        buffer.setlen(0)
-        state = psNeutral
-        
-    of psExpr:
-      if c == '}' and buffer.isValidExpr:
-        yield buffer
-        buffer.setlen(0)
-        state = psNeutral
-
-
-
 when true:
 
-  var x = 1
-  for x in parseFormatString("$$ hallo $x = ${x+1}"):
-    echo "here: ", x
+  let x = 1
+  format("${x+1}")
+  #format("$$ hallo $x = ${x+1}")
+  #format("$.")
 
   #for x in interpolatedFragments("""${s & "local substring with {{{"}"""):
   #  echo x
