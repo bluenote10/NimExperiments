@@ -1,10 +1,17 @@
 
 import macros
 
+#template howToGetType(e: expr, : typedesc): typedesc =
+#  echo e.getType
+#  e.type
+
 when false:
+  iterator formatChars(s: string): char =
+    yield 'd'
+
   macro safePrintF(formatString: string{lit}, args: varargs[expr]): expr =
     var i = 0
-    for c in formatChars(formatString):
+    for c in formatChars(formatString.strVal):
       var expectedType = case c
         of 'c': char
         of 'd', 'i', 'x', 'X': int
@@ -16,9 +23,9 @@ when false:
       var actualType = args[i].getType
       inc i
 
-      if expectedType == EOutOfRange:
+      if expectedType is EOutOfRange:
         error c & " is not a valid format character"
-      elif expectedType != actualType:
+      elif not (expectedType is actualType):
         error "type mismatch for argument ", i, ". expected type: ",
               expectedType.name, ", actual type: ", actualType.name
 
@@ -90,7 +97,7 @@ macro format(s: string): stmt =
   # to avoid manual parsing of {}-expressions.
   # Solution: An iterator can be nested in any
   # {.compileTime.} proc / template / macro
-  iterator parseFormatString(s: string): string =
+  iterator parseFormatString(s: string): NimNode =
 
     var state = psNeutral
     var buffer = ""
@@ -102,7 +109,7 @@ macro format(s: string): stmt =
       of psNeutral:
         if c == '$':
           echo "yielding ", buffer
-          yield buffer
+          yield newStrLitNode(buffer)
           buffer.setlen(0)
           state = psOneDollar
         else:
@@ -111,7 +118,7 @@ macro format(s: string): stmt =
       of psOneDollar:
         if c == '$':                  # second dollar -> yield "$", return to neutral
           echo "yielding $"
-          yield "$"
+          yield newStrLitNode("$")
           state = psNeutral
         elif c == '{':
           state = psExpr
@@ -126,7 +133,7 @@ macro format(s: string): stmt =
           buffer.add(c)
         else:
           echo "yielding ", buffer
-          yield buffer
+          #yield nnkIdent(buffer)
           buffer.setlen(0)
           state = psNeutral
 
@@ -134,8 +141,12 @@ macro format(s: string): stmt =
         echo "current expr: ", buffer
         if c == '}' and buffer.isValidExpr:
           echo "yielding ", buffer
-          echo "yielding ", parseExpr(buffer).toStrLit.strVal
-          yield parseExpr(buffer).strVal
+          let e = parseExpr(buffer)
+          echo "yielding ", e.toStrLit.strVal
+          #echo "type of expr: ", e.getType
+          #var t = getType(e)
+          #echo "x = ", treeRepr(t)
+          yield parseExpr(buffer)
           buffer.setlen(0)
           state = psNeutral
         else:
@@ -143,16 +154,40 @@ macro format(s: string): stmt =
 
   echo "Parsing s = ", s
 
-  for x in parseFormatString(s.strVal):
-    echo "iterator yielded: ", x
+  for n in parseFormatString(s.strVal):
+    echo "iterator yielded: "
+    echo n.kind
+    #dumpTree: n
+    echo treeRepr(n)
 
   result = quote do:
     echo "Hello World"
-  
-when true:
 
+macro simple(s: string): stmt =
+  let n = parseExpr(s.strVal)
+  echo treeRepr(n)
+  # looking good:
+  # Infix
+  #   Ident !"+"
+  #   Ident !"y"
+  #   IntLit 1
+  #   
+  # how to get type type of the parsed node here? (int in the example)
+  # n.getType yields Error: node has no type
+  # echo n.typeKind
+  result = quote do:
+    echo `n`
+
+var y = 1
+simple("y+1")
+
+when true:
+  import strutils
+  let s = (1.0).formatFloat(ffDecimal, 4)
+  echo s
+  
   let x = 1
-  format("${x+1}")
+  format("Hallo${asd}")
   #format("$$ hallo $x = ${x+1}")
   #format("$.")
 
