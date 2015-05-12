@@ -164,8 +164,12 @@ macro format(s: string): stmt =
     echo "Hello World"
 
 macro simple(s: string): stmt =
-  let n = parseExpr(s.strVal)
-  echo treeRepr(n)
+  let ne = parseExpr(s.strVal)
+  echo treeRepr(ne)
+  let ns = parseStmt(s.strVal)
+  echo treeRepr(ns)
+  let t = ns.getType
+  echo "Type is: ", t.repr
   # looking good:
   # Infix
   #   Ident !"+"
@@ -176,10 +180,31 @@ macro simple(s: string): stmt =
   # n.getType yields Error: node has no type
   # echo n.typeKind
   result = quote do:
-    echo `n`
+    echo `ne`
 
 var y = 1
 simple("y+1")
+
+when false:
+  ## analyze difference between typed/untyped, i.e., stmt/expr
+  macro showTheType(x: typed): stmt =
+    let t = x.getType
+    echo "Type is ", t.repr, "    tree = ", t.treerepr
+    if t.typekind == ntyInt:
+      echo "Yes, it is an int 1"
+    result = quote do:
+      echo " *** here"
+
+  showTheType(y+1)
+  showTheType("asdf" & "asdf")
+
+  type
+    Person = object
+      name, address: string
+
+  let p = Person(name: "some", address: "thing")
+  showTheType(p)
+
 
 when true:
   import strutils
