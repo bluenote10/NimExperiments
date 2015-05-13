@@ -163,27 +163,70 @@ macro format(s: string): stmt =
   result = quote do:
     echo "Hello World"
 
-macro simple(s: string): stmt =
-  let ne = parseExpr(s.strVal)
-  echo treeRepr(ne)
-  let ns = parseStmt(s.strVal)
-  echo treeRepr(ns)
-  let t = ns.getType
-  echo "Type is: ", t.repr
-  # looking good:
-  # Infix
-  #   Ident !"+"
-  #   Ident !"y"
-  #   IntLit 1
-  #   
-  # how to get type type of the parsed node here? (int in the example)
-  # n.getType yields Error: node has no type
-  # echo n.typeKind
-  result = quote do:
-    echo `ne`
+when false:
+  macro stringParseTest(s: string): stmt =
+
+    #macro getType(s: stmt): stmt =
+    #  var t = s.getType
+    #  echo "Type is ", t.treerepr
+    #  result = quote do:
+    #    echo "does nothing"
+
+    let trueString = s.strVal
+    let ne = parseExpr(trueString)
+    let ns = parseStmt(trueString)
+    echo treeRepr(ne)
+    echo treeRepr(ns)
+    #discard getType(ns)
+    # looking good:
+    # Infix
+    #   Ident !"+"
+    #   Ident !"y"
+    #   IntLit 1
+    #   
+    # But how to get the type of the parsed node here? (int in the example)
+    # even ns.getType yields Error: node has no type
+    #let t = ns.getType
+    #echo "Type is: ", t.repr
+    result = quote do:
+      echo "does nothing"
+
+  var y = 1
+  var (a, b) = ("a", "b")
+  stringParseTest("y+1")
+  stringParseTest("a & b")
+
+
+macro parse(x: string): untyped =
+  result = parseExpr(x.strVal)
+
+macro typecheck(x: typed): untyped =
+  echo "The type here is: ", repr x.getType()
+  result = newStmtList()
+
+template stringParseTest1(s: string): stmt =
+#macro stringParseTest(s: string): stmt =
+  echo s
+  #typecheck(parse(s.strVal))
+  let otherS = s & "+" & s #"y + 2"
+  typecheck(parse(otherS))
+
+
+import strutils
+
+#template stringParseTest(s: string): stmt =
+#  let sComputed = s.strip()
+#  typecheck(parse(sComputed))
+
+template stringParseTest(x) =
+  var s = parseExpr("y+1")
+  typecheck parse s.strval
 
 var y = 1
-simple("y+1")
+var (a, b) = ("a", "b")
+stringParseTest(" y+1 ")
+stringParseTest("a & b")
+
 
 when false:
   ## analyze difference between typed/untyped, i.e., stmt/expr

@@ -1,3 +1,10 @@
+var s1 = "hello"
+var s2 = "\0\0\0\0"
+
+var s3 = s1 & s2
+echo s3.len
+echo s3.repr
+
 when false:
   echo "Hello"
 
