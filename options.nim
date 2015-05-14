@@ -41,7 +41,7 @@ proc isSome*(o: Option): bool =
   ## Returns ``true`` if `o` isn't `none`.
   o.isSome
 
-template `?=`*(into: expr, o: Option): bool {.immediate.} =
+template `?=`*(into: expr, o: Option): bool =
   ## Returns ``true`` if `o` isn't `none`.
   ##
   ## Injects a variable with the name specified by the argument `into`
@@ -57,7 +57,25 @@ template `?=`*(into: expr, o: Option): bool {.immediate.} =
   var into {.inject.}: type(o.val)
   if o:
     into = o.val
-  o
+  o.isSome
+
+template `??=`*(into: expr, o: Option): bool {.immediate.} =
+  ## Returns ``true`` if `o` isn't `none`.
+  ##
+  ## Injects a variable with the name specified by the argument `into`
+  ## with the value of `o`, or its type's default value if it is `none`.
+  ##
+  ## .. code-block:: nim
+  ##
+  ##   proc message(): ?string =
+  ##     some "Hello"
+  ##
+  ##   if m ?= message():
+  ##     echo m
+  var into {.inject.}: type(o.val)
+  if o:
+    into = o.val
+  o.isSome
 
 
 proc get*[T](o: Option[T]): T =
@@ -86,7 +104,7 @@ template getOr*[T](a, b: Option[T]): Option[T] =
 proc map*[A,B](o: Option[A], f: proc (x: A): B): Option[B] =
   ## Takes an modification proc f, and applies it to the optional value, i.e.,
   ## returns `some(f(o.val))` if `o` is has a value otherwise `none`
-  if x ?= o:
+  if x ??= o:
     some(f(x))
   else:
     none(B)
@@ -96,21 +114,21 @@ proc flatMap*[A,B](o: Option[A], f: proc (x: A): Option[B]): Option[B] =
   ## the optional value. This means if `o` has a value, the result becomes
   ## the optional result of the computation `f(o.val)`. If `o` is `none`,
   ## the result is `none(B)`.
-  if x ?= o:
+  if x ??= o:
     f(x)
   else:
     none(B)
 
 iterator items*[T](o: Option[T]): T =
-  if x ?= o:
-    yield x
+  if x ??= o:
+    yield x.val
 
 proc `==`*(a, b: Option): bool =
   ## Returns ``true`` if both ``Option`` are `none`,
   ## or if they have equal values
   (a.isSome and b.isSome and a.val == b.val) or (not a.isSome and not b.isSome)
 
-proc `$`[T](o: Option[T]): string =
+proc `$`*[T](o: Option[T]): string =
   ## Converts to string: `"some(value)"` or `"none(type)"`
   if o.isSome:
     "some(" & $o.val & ")"
