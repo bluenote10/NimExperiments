@@ -253,10 +253,14 @@ when isMainModule:
       assert false
 
   block: # extraction template
-    if a ?= just(5):
-      assert a == 5
-    else:
-      assert false
 
-    if b ?= nothing(string):
+    proc f[T](x: Maybe[T]) =
+      if a ?= x:
+        assert a == 5
+      else:
+        assert false
+    let x = just(5)
+    f(x)
+
+    if (b ?= nothing(string)):
       assert false
