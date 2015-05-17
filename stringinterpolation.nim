@@ -26,6 +26,9 @@ template formatUnsafe*(formatString: string, args: varargs[expr]): string =
   let requiredSize = appendVarargs(snprintf(nil, 0, formatString), args)
   # note: method call syntax passes a different tree!
 
+  if requiredSize < 0:
+    raise newException(ValueError, "illegal format string \"" & formatString & "\"")
+
   # now create string of appropriate size
   var s = newStringOfCap(requiredSize + 1) # +1 because requiredSize does not include '\0'
 
@@ -36,15 +39,16 @@ template formatUnsafe*(formatString: string, args: varargs[expr]): string =
 
 
 # TODO: make some unittests
-let s = formatUnsafe("%3d %8.3fX", 42+1, 3.14)
-echo formatUnsafe("%3d %12.3fX", 42, 3.14)
-echo s.len
-echo s
+when false:
+  let s = formatUnsafe("%3d %8.3fX", 42+1, 3.14)
+  echo formatUnsafe("%3d %12.3fX", 42, 3.14)
+  echo s.len
+  echo s
 
-var digits = 15
-echo formatUnsafe("%" & $digits & "d", 1_000_000)
+  var digits = 15
+  echo formatUnsafe("%" & $digits & "d", 1_000_000)
 
-echo formatUnsafe("Hallo 1%% Test")
+  echo formatUnsafe("Hallo 1%% Test")
 
 
 
@@ -104,32 +108,32 @@ proc parseFormatStringStupid(s: string): FormatStringMatch =
 
   return FormatStringMatch(kind: fsInvalid)
 
-
-let strings = [
-  "%asdf",
-  "ddd",
-  " d",
-  " +-0#d",
-  "f",
-  "d",
-  "s",
-  "5f",
-  "5.1f",
-  ".2f",
-  "50.20f",
-  "5.2.2f",
-  "5.f",
-  "zu",
-  "zzu",
-  "hhd",
-  "hhhhd",
-]
-for s in strings:
-  let m = parseFormatString(s)
-  let m2 = parseFormatStringStupid(s)
-  echo "Expression: '", s, "' => ", m, " match len: ", m.len, "   ", m2
-  #assert m.kind == m2.kind
-  #assert m.len == m2.len
+when false:
+  let strings = [
+    "%asdf",
+    "ddd",
+    " d",
+    " +-0#d",
+    "f",
+    "d",
+    "s",
+    "5f",
+    "5.1f",
+    ".2f",
+    "50.20f",
+    "5.2.2f",
+    "5.f",
+    "zu",
+    "zzu",
+    "hhd",
+    "hhhhd",
+  ]
+  for s in strings:
+    let m = parseFormatString(s)
+    let m2 = parseFormatStringStupid(s)
+    echo "Expression: '", s, "' => ", m, " match len: ", m.len, "   ", m2
+    #assert m.kind == m2.kind
+    #assert m.len == m2.len
 
 
 proc extractFormatStrings(s: string): seq[FormatStringMatch] =
@@ -160,7 +164,7 @@ macro format*(formatString: string{lit}, args: varargs[expr]): expr =
   echo formatStrings
   echo formatStrings.len, " == ", args.len 
   if formatStrings.len != args.len:
-    error "number of varargs does not match number of string formatters"
+    error "number of varargs ("  & $args.len & ") does not match number of string formatters (" & $formatStrings.len & ")"
 
   result = newCall("formatUnsafe", formatString)
 
@@ -215,7 +219,7 @@ macro format*(formatString: string{lit}, args: varargs[expr]): expr =
   echo " *** Generated call: ", result.treerepr
 
 
-block:
+when false:
   #let s = format("%3d %8.3fX", (42+1), 3.14*1.0)
   #let s = format("%3d %8.3fX %s", (42+1), 3.14*1.0, @[1,2,3])
   let s = format("%12d %s %s %5.3e", 42.int16, 3.14*1.0, @[1,2,3], 1.234)
@@ -225,4 +229,165 @@ block:
 
 
 
+const
+  Whitespace = {' ', '\t', '\v', '\r', '\l', '\f'}
+  IdentChars = {'a'..'z', 'A'..'Z', '0'..'9', '_'}
+  IdentStartChars = {'a'..'z', 'A'..'Z', '_'}
+   ## copied from parseutils, which copied from strutils
+   ## maybe these characters should be exported in a single place?
 
+
+
+
+
+proc isValidExpr(s: string): bool {.compileTime.} =
+  try:
+    discard parseExpr(s)
+    return true
+  except ValueError:
+    return false
+
+
+
+macro ifmt(formatStringNode: string): expr =
+
+  let formatString = formatStringNode.strVal
+
+  type
+    ParseState = enum
+      psNeutral, psOneDollar, psIdent, psExpr
+
+  var state = psNeutral
+  var buffer = ""
+  var i = 0
+
+  var outFmtStr = ""
+  var outArgs = newSeq[NimNode]()
+
+  while i < formatString.len:
+    let c = formatString[i]
+    echo c, " state: ", state
+    case state
+
+    of psNeutral:
+      if c == '$':
+        state = psOneDollar
+        buffer.setlen(0) # clear buffer for ident/expr accumulation
+        inc i
+      elif c == '%':
+        inc i
+        if i < formatString.len and formatString[i] == '%':
+          outFmtStr.add("%%")
+          inc i
+        else:
+          error "format string contains an unescaped '%' character (use \"%%\" to escape)"
+      else:
+        outFmtStr.add(c)
+        inc i
+
+    of psOneDollar:
+      if c == '$': # second dollar -> yield "$", return to neutral
+        outFmtStr.add("$")
+        state = psNeutral
+      elif c == '{':
+        state = psExpr
+      elif c in IdentStartChars:
+        state = psIdent
+        buffer.add(c)
+      else:
+        error "a '$' character must either be followed by '$', an identifier, or a {} expression"
+      inc i
+
+    of psIdent:
+      if c in IdentChars:
+        buffer.add(c)
+        inc i
+      elif c == '%':
+        outArgs.add(newIdentNode(buffer))
+        let substr = formatString[i+1..^1]
+        echo "substr: ", substr
+        let formatter = parseFormatStringStupid(substr)
+        echo "formatter: ", formatter
+        
+        case formatter.kind:
+        of fsMatch:  # if we have a valid format string: append it and inc by '%' + formatter.len
+          outFmtStr.add('%' & formatter.s)
+          i += 1 + formatter.len
+        of fsPct: # if the '%' char was actually an escaped double '%': provide default formatter + insert '%%'
+          outFmtStr.add("%s%%")
+          i += 1 + formatter.len # == 2, but written consistently
+        of fsInvalid:
+          error "could not parse format string '" & substr & "'"
+        state = psNeutral
+      else:
+        outArgs.add(newIdentNode(buffer))
+        outFmtStr.add("%s")
+        state = psNeutral
+        # note: we no _not_ increase i here
+        # in order to parse the same character
+        # again in neutral state, allowing to
+        # check for '$'.
+
+    of psExpr:
+      echo "current expr: ", buffer
+      if c == '}' and buffer.isValidExpr:
+        outArgs.add(parseExpr(buffer))
+        state = psNeutral
+        inc i
+        # peek into next char to see if we have a format string
+        if i < formatString.len:
+          let c = formatString[i]
+          if c == '%':
+            let substr = formatString[i+1..^1]
+            echo "substr: ", substr
+            let formatter = parseFormatStringStupid(substr)
+            echo "formatter: ", formatter
+
+            case formatter.kind:
+            of fsMatch:  # if we have a valid format string: append it and inc by '%' + formatter.len
+              outFmtStr.add('%' & formatter.s)
+              i += 1 + formatter.len
+            of fsPct: # if the '%' char was actually an escaped double '%': provide default formatter + insert '%%'
+              outFmtStr.add("%s%%")
+              i += 1 + formatter.len # == 2, but written consistently
+            of fsInvalid:
+              error "could not parse format string '" & substr & "'"
+          else:
+            # no explicit formatter: insert the default formatter
+            outFmtStr.add("%s")
+        else:
+          # at end of string we have to insert the default formatter
+          outFmtStr.add("%s")
+      else:
+        buffer.add(c)
+        inc i
+
+
+  # handle termination
+  if state == psIdent:
+    outArgs.add(newIdentNode(buffer))
+    outFmtStr.add("%s")
+  elif state == psOneDollar or state == psExpr:
+    error "format string is not properly terminated"
+
+
+  echo " *** outFmtStr: ", outFmtStr
+  echo " *** outArgs: ", outArgs.repr
+
+  result = newCall("format", newStrLitNode(outFmtStr))
+
+  for arg in outArgs:
+    result.add(arg)
+
+  echo result.treeRepr
+
+block:
+  let x = 1
+  #echo ifmt" %% test x = $x%d$x%5s$x%%$x%%"
+
+  #echo ifmt"%%${x+1}%5d${x+2}%s${3+x}%%$$$x$$"
+  #echo formatUnsafe("%d%", x)
+  #echo ifmt"% "
+  #
+  let s = "test"
+  echo ifmt"""${s & "{}"}"""
