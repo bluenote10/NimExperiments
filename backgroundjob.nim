@@ -1,52 +1,73 @@
-import os, threadpool
 
-import sequtils
-
-proc someproc(a, b: string): seq[tuple[a, b: char]] =
-    let
-        s1 = toSeq(a)
-        s2 = toSeq(b)
-    result = zip(s1, s2)
+import utils
+import os
+import threadpool
 
 
-echo someproc("asdf", "kjgs")
-    
-when false:
-  proc spawnBackgroundJob[T](f: iterator (): T): TChannel[T] =
+type
+  ReloadChannel = TChannel[string]
 
-    type Args = tuple[iter: iterator (): T, channel: ptr TChannel[T]]
+proc backgroundThread() =
+  for i in 0..5:
+    os.sleep(100)
+    echo "Sleeping ", i
 
-    proc threadFunc(args: Args) {.thread.} =
-      echo "Thread is starting"
-      let iter = args.iter
-      var channel = args.channel[]
+proc backgroundPoller(channel: ptr ReloadChannel) {.thread.} =
+  #echo channel[].recv()
+  channel[].open()
+  echo "Channel opened"
+  for i in 0..5:
+    os.sleep(100)
+    echo "Trying to send"
+    channel[].send("Sleeping " & $i)
+    echo "Send"
+  #channel[].close()
+  echo "Terminating thread"
 
-      for i in iter():
-        echo "Sending ", i
-        channel.send(i)
+type
+  ShaderProgram = object
+    numUnifs: int
+    numAttrs: int
 
-    var thread: TThread[Args]
-    var channel: TChannel[T]
-    channel.open()
+proc shaderProgramCreate*(vsFile, fsFile: string) =
+  echo "Spawning background thread"
+  #spawn backgroundThread()
+  #sync()
 
-    let args = (f, channel.addr)
-    createThread(thread, threadFunc, args)
+  var thread: TThread[ptr ReloadChannel]
+  var channel: ReloadChannel
 
-    result = channel
+  createThread(thread, backgroundPoller, addr(channel))
+
+  echo "Spawning background thread [done]"
+  echo "Thread: ", thread.repr
+  echo "Channel: ", channel.repr
+  #joinThread(thread)
+
+  while true:
+    echo "Trying to receive:"
+    #echo "Received: ", channel.tryRecv().repr
+    os.sleep(100)
+
+  echo "Closing channel"
+  #channel.close()
+  #sleep(5000)
 
 
-  iterator test(): int {.closure.} =
-    sleep(500)
-    yield 1
-    sleep(500)
-    yield 2
 
-  var channel = spawnBackgroundJob[int](test)
+proc spawnBackgroundThread[T](f: proc (): T) =
 
-  for i in 0 .. 10:
-    sleep(200)
-    echo channel.peek()
+  var thread: TThread[ptr TChannel[T]]
+  var channel: TChannel[T]
 
-  echo "Finished"
+  createThread(thread, f, addr(channel))
+  discard
 
 
+
+runUnitTests:
+
+  proc f(): int {.gcsafe.} =
+    42
+
+  spawnBackgroundThread(f)
