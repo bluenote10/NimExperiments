@@ -11,8 +11,9 @@
 #file=reprBug.nim
 #file=optionals_orig.nim
 #file=options.nim
-file=stringinterpolation.nim
+#file=stringinterpolation.nim
 #file=nretest.nim
+file=eknnd.nim
 
 fileAbs=`readlink -m $file`
 traceback=false
