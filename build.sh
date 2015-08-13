@@ -13,7 +13,8 @@
 #file=options.nim
 #file=stringinterpolation.nim
 #file=nretest.nim
-file=eknnd.nim
+#file=eknnd.nim
+file=notnil.nim
 
 fileAbs=`readlink -m $file`
 traceback=false
