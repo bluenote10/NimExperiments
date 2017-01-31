@@ -1,3 +1,5 @@
 nimcache
 bin
+df_test
+*.csv
 .changes
