@@ -91,7 +91,7 @@ method iter[T](df: FilteredDataFrame[T]): (iterator(): T) =
 # df_design_02.nim(81, 8) Warning: method has lock level 0, but another method has <unknown> [LockLevel]
 # df_design_02.nim(81, 8) Warning: method has lock level 0, but another method has <unknown> [LockLevel]
 # Where the first warning points to the third definition of collect (the one for MappedDataFrame).
-# I'm confused because none of them has a modified locklevel.
+# I'm confused because none of them has an explicit locklevel.
 method collect[T](df: DataFrame[T]): seq[T] {.base.} =
   quit "base method called (DataFrame.collect)"
 
@@ -113,10 +113,29 @@ echo data.map(x => x*2).collect()
 echo data.map(x => x*2).map(x => x*2).collect()
 echo data.filter(x => x mod 2 == 1).map(x => x * 100).collect()
 
-# Issue 4: Trying to define generic numerical actions like mean/min/max fails
+# Issue 4:
+# The following errors with
+#   `Error: method is not a base`
+# but only when there is client code calling it with different
+# types T, e.g. int and string. Not a big problem right now since
+# I can just make it a proc (no overloads required at the moment),
+# but still a bit worrying, because later overloading might be necessary.
+when false:
+  method count*[T](df: DataFrame[T]): int {.base.} =
+    result = 0
+    let it = df.iter()
+    for x in toIterBugfix(it):
+      result += 1
+
+  echo newCachedDataFrame[int](@[1, 2, 3]).count()
+  echo newCachedDataFrame[string](@["1", "2", "3"]).count()
+
+# Issue 5: Trying to define generic numerical actions like mean/min/max fails
 # with a compilation error:
 #   `Error: type mismatch: got (string) but expected 'float'`
 # even though the method is never called with T being a string.
+# Work around is also to use a proc, but overloading may be
+# desirable.
 when false:
   method mean*[T](df: DataFrame[T]): float =
     result = 0
@@ -127,8 +146,9 @@ when false:
       result += x.float
     result /= count.float
 
-  # The get the error it suffices (and is required) to just have a DataFrame[string]
+  # To get the error it suffices (and is required) to just have a DataFrame[string]
   # in scope:
   let strData = newCachedDataFrame[string](@["A", "B"])
+
 
 
