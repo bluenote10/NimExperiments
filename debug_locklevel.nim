@@ -14,7 +14,7 @@ type
 # Transformations
 # -----------------------------------------------------------------------------
 
-method map[T, U](df: DataFrame[T], f: proc(x: T): U): DataFrame[U] {.base.} =
+proc map[T, U](df: DataFrame[T], f: proc(x: T): U): DataFrame[U] =
   result = MappedDataFrame[T, U](orig: df, mapper: f)
 
 # -----------------------------------------------------------------------------
