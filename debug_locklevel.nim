@@ -11,13 +11,6 @@ type
     mapper: proc(x: T): U
 
 # -----------------------------------------------------------------------------
-# Transformations
-# -----------------------------------------------------------------------------
-
-proc map[T, U](df: DataFrame[T], f: proc(x: T): U): DataFrame[U] =
-  result = MappedDataFrame[T, U](orig: df, mapper: f)
-
-# -----------------------------------------------------------------------------
 # Iterators
 # -----------------------------------------------------------------------------
 
@@ -45,6 +38,14 @@ method collect[S, T](df: MappedDataFrame[S, T]): seq[T] =
   let it = df.orig.iter()
   for x in it():
     result.add(df.mapper(x))
+
+# -----------------------------------------------------------------------------
+# Transformations
+# -----------------------------------------------------------------------------
+
+proc map[T, U](df: DataFrame[T], f: proc(x: T): U): DataFrame[U] =
+  result = MappedDataFrame[T, U](orig: df, mapper: f)
+
 
 let data = CachedDataFrame[int](data: @[1, 2, 3])
 echo data.map(x => x).collect()
