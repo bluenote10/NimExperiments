@@ -1,10 +1,21 @@
 import macros
 
+#[
+macro iterateFields2(t: tuple): untyped =
+  let tup = (a: 1, b: 2)
+  for field, ftype in fieldPairs(tup):
+    echo "Iterating field: " & field & " -> " & ftype.type
+]#
+
 macro iterateFields*(t: typed): untyped =
   echo "--------------------------------"
 
   # check type of t
   var tTypeImpl = t.getTypeImpl
+  if tTypeImpl.isNil:
+    error "No type impl available"
+  else:
+    echo "okay"
   echo tTypeImpl.len
   echo tTypeImpl.kind
   echo tTypeImpl.typeKind
@@ -35,11 +46,12 @@ macro iterateFields*(t: typed): untyped =
 
 type
   TestObj = object
-    a: int
-    b: string
+    x: int
+    y: int
+    name: string
 
 let t = (x: 0, y: 1, name: "")
-let o = TestObj(a: 0, b: "")
+let o = TestObj(x: 0, y: 1, name: "")
 
 iterateFields(t)
 iterateFields(o)
