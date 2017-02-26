@@ -1,13 +1,9 @@
+*
+!**/
+!*.*
+
 nimcache
 bin
 df_test
 *.csv
 .changes
-df_design_??
-debug_closure_defer
-debug_base_on_generic
-debug_invalid_declaration_order
-debug_locklevel
-debug_method_not_a_base
-copySemantics
-macro_fields
