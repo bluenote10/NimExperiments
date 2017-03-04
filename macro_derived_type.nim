@@ -118,7 +118,7 @@ when true:
   proc extractFields(n: NimNode): OrderedTable[string, NimNode] =
     # extract fields present in given tuple
     result = initOrderedTable[string, NimNode]()
-    echo n.treeRepr
+    # echo n.treeRepr
     for child in n.children:
       if child.kind != nnkIdentDefs:
         error "extractFields expects a tuple or object, consisting of nnkIdentDefs children."
@@ -189,16 +189,105 @@ when true:
             newIdentDefs(name=ident(field), kind=ftype)
           )
 
-    #result.add(
-    #  newIdentDefs(name = newIdentNode(col.name), kind = typ)
-    #)
+  macro joinTuple(a: tuple, b: tuple, on: static[openarray[string]]): untyped =
 
-  proc join*[A, B](a: seq[A], b: seq[B], on: static[openarray[string]]): auto =
-    result = newSeq[determineType(A, B, on)](1)
-    #echo "result type = ", determineType(A, B).type.name
+    let fieldsA = extractFields(a.getTypeImpl)
+    let fieldsB = extractFields(b.getTypeImpl)
+
+    result = newNimNode(nnkPar)
+    for field in on:
+      if not (field in fieldsA):
+        error "Operand A does not have required field: " & field
+      elif not (field in fieldsB):
+        error "Operand B does not have required field: " & field
+      elif fieldsA[field] != fieldsB[field]:
+        error "Operands do not have same type\n" &
+              "Type of field '" & field & "' in operand A: " & fieldsA[field].repr & "\n" &
+              "Type of field '" & field & "' in operand B: " & fieldsB[field].repr
+      else:
+        let dotExpr = newDotExpr(a, ident(field))
+        result.add(
+          newColonExpr(ident(field), dotExpr)
+        )
+
+    for field, ftype in fieldsA:
+      if not (field in on):
+        var fieldName = field
+        if field in fieldsB:
+          fieldName &= "_a"
+        let dotExpr = newDotExpr(a, ident(field))
+        result.add(
+          newColonExpr(ident(fieldName), dotExpr)
+        )
+
+    for field, ftype in fieldsB:
+      if not (field in on):
+        var fieldName = field
+        if field in fieldsA:
+          fieldName &= "_b"
+        let dotExpr = newDotExpr(b, ident(field))
+        result.add(
+          newColonExpr(ident(fieldName), dotExpr)
+        )
+    echo result.repr
+    
+  macro tupleMatches(a: tuple, b: tuple, on: static[openarray[string]]): untyped =
+    let fieldsA = extractFields(a.getTypeImpl)
+    let fieldsB = extractFields(b.getTypeImpl)
+    result = newNimNode(nnkPar)
+    for field in on:
+      if not (field in fieldsA):
+        error "Operand A does not have required field: " & field
+      elif not (field in fieldsB):
+        error "Operand B does not have required field: " & field
+      else:
+        let exprA = newDotExpr(a, ident(field))
+        let exprB = newDotExpr(b, ident(field))
+        result.add(
+          infix(exprA, "==", exprB)
+        )
+    # echo result.repr
+
+  proc join*[A, B](seqA: seq[A], seqB: seq[B], on: static[openarray[string]]): auto =
+    result = newSeq[determineType(A, B, on)]()
+    for a in seqA:
+      for b in seqB:
+        let matches = tupleMatches(a, b, on)
+        echo "a = ", a, " b = ", b, " matches => ", matches
+        if matches:
+          result.add(joinTuple(a, b, on))
+
+  proc joinGenericReturn*[A, B, C](seqA: seq[A], seqB: seq[B], on: static[openarray[string]]): seq[C] =
+    result = newSeq[C]()
+    for a in seqA:
+      for b in seqB:
+        let matches = tupleMatches(a, b, on)
+        echo "a = ", a, " b = ", b, " matches => ", matches
+        if matches:
+          result.add(joinTuple(a, b, on))
+
+  macro joinMacro*[A, B](seqA: seq[A], seqB: seq[B], on: static[openarray[string]]): untyped =
+    #[
+    dumpTree:
+      joinGenericReturn[A, B, C](seqA, seqB, on)
+    #result = newCall(bindsym"joinGenericReturn", seqA, seqB, on)
+    let resultType = determineType(A, B, on)
+    let genericBracket = newNimNode(nnkBracketExpr)
+    genericBracket.add(seqA)
+    genericBracket.add(seqB)
+    genericBracket.add(resultType)
+    result = newNimNode(nnkCall)
+    result.add(genericBracket)
+    echo result.repr
+    ]#
+    result = quote do: discard
 
   let a1 = (name: "A", age: 99, complex: (re: 1.0, im: 2.0))
   let b1 = (name: "A", height: 1.80)
+  let b2 = (name: "A", height: 1.50)
+  let b3 = (name: "B", height: 1.50)
 
-  echo join(@[a1], @[b1], ["name"])
+  let joined = join(@[a1], @[b1, b2, b3], ["name"])
+  for x in joined:
+    echo x
 
