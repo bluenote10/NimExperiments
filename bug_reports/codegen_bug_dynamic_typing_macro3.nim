@@ -26,9 +26,9 @@ macro injectSymbolInBlocks(varname: untyped, procBody: untyped): untyped =
   for i in [1, 2]: # only fails with more than 1 block
     let body = newStmtList()
     body.add(newLetStmt(varname, newIntLitNode(1)))
-    body.add(procBody)
+    body.add(procBody[0])
     result.add(newBlockStmt(body))
-  echo result.repr
+  echo result.treerepr
 
 # This causes the codegen to fail
 proc macroVersion() =
