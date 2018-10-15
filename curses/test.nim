@@ -1,17 +1,66 @@
 import ncurses
 import os
+import strutils
 import sequtils
 import sugar
 import strformat
+import algorithm
 
 type
   WindowPtr = ptr window
 
   File = tuple[kind: PathComponent, path: string]
 
-proc getFiles(): seq[File] =
-  toSeq(walkDir("."))
-  
+  FileList = object
+    absPath: string
+    files: seq[File]
+    highlighted: int
+    scrollOffset: int
+
+
+proc cmpFile(a: File, b: File): int =
+  template tryReturn() =
+    if result != 0:
+      return result
+  let aKindSimple = a.kind == pcFile or a.kind == pcLinkToFile
+  let bKindSimple = b.kind == pcFile or b.kind == pcLinkToFile
+  result = cmp(aKindSimple, bKindSimple)
+  tryReturn()
+  result = cmp(a.path.startsWith('.'), b.path.startsWith('.'))
+  tryReturn()
+  result = cmp(a.path.toLowerAscii, b.path.toLowerAscii)
+
+proc getFileList(directory=getCurrentDir()): FileList =
+  let files = toSeq(walkDir(directory)).sorted(cmpFile)
+  FileList(
+    absPath: absolutePath(directory),
+    files: files,
+    highlighted: 0,
+    scrollOffset: 0,
+  )
+
+proc decHighlighted(fl: var FileList) =
+  if fl.highlighted > 0:
+    fl.highlighted -= 1
+
+proc incHighlighted(fl: var FileList) =
+  if fl.highlighted < fl.files.len - 1:
+    fl.highlighted += 1
+
+proc tryEnter(fl: FileList): FileList =
+  let selectedFile = fl.files[fl.highlighted]
+  if selectedFile.kind == PathComponent.pcDir:
+    return getFileList(selectedFile.path)
+  else:
+    return fl
+
+proc tryParent(fl: FileList): FileList =
+  let parentDir = parentDir(fl.absPath)
+  if parentDir != "":
+    return getFileList(parentDir)
+  else:
+    return fl
+
 
 proc initWindow(): WindowPtr =
   var win = initscr()
@@ -19,15 +68,44 @@ proc initWindow(): WindowPtr =
   curs_set(0)
   start_color()
   use_default_colors()
- 
+  #assume_default_colors()
+
   win.keypad(true) # get function keys
   return win
 
-proc drawFiles(window: WindowPtr, files: seq[File]) =
+
+proc drawFiles(window: WindowPtr, fileList: FileList) =
+  window.wclear()
   window.wmove(0, 0)
-  for file in files:
-    window.waddstr(file.path & "\n")
+  window.waddstr(&"{fileList.absPath}")
+
+  let colorFile = 1.cshort
+  let colorDir = 2.cshort
+  discard init_pair(colorFile, COLOR_WHITE, -1)
+  discard init_pair(colorDir, COLOR_BLUE, -1)
+
+  window.wmove(2, 0)
+  for i, file in fileList.files:
+    let color =
+      if file.kind == pcFile or file.kind == pcLinkToFile:
+        colorFile
+      else:
+        colorDir
+
+    # set attr
+    window.wattron(COLOR_PAIR(color))
+    if i == fileList.highlighted:
+      window.wattron(A_REVERSE)
+
+    let filename = file.path.extractFilename
+    window.waddstr(&"{filename:-60s}\n")
+
+    # restore attr
+    window.wattroff(COLOR_PAIR(color))
+    if i == fileList.highlighted:
+      window.wattroff(A_REVERSE)
   window.wrefresh()
+
 
 proc drawTestWrap(window: WindowPtr) =
   window.wmove(0, 0)
@@ -36,6 +114,7 @@ proc drawTestWrap(window: WindowPtr) =
       window.waddstr(&" ({i} {j})")
     window.waddstr("\n")
   window.wrefresh()
+
 
 proc drawTestColor(window: WindowPtr) =
   window.wmove(0, 0)
@@ -51,14 +130,33 @@ proc drawTestColor(window: WindowPtr) =
 
 proc main() =
   var window = initWindow()
-  let files = getFiles()
-  
-  drawFiles(window, files)
-  drawTestColor(window)
+  var fileList = getFileList()
 
-  let ch = window.wgetch()
+  #drawTestColor(window)
+
+  let keypressLog = open(".keypresses", fmWrite)
+
+  while true:
+    drawFiles(window, fileList)
+    let ch = window.wgetch()
+    keypressLog.writeLine(ch)
+
+    case ch
+    of 'q'.ord():
+      break
+    of KEY_UP:
+      fileList.decHighlighted()
+    of KEY_DOWN:
+      fileList.incHighlighted()
+    of 10:  # ENTER
+      fileList = fileList.tryEnter()
+    of 263:  # BACKSPACE
+      fileList = fileList.tryParent()
+    else:
+      discard
+
   endwin()
-  echo "Exit char: ", ch
+
 
 main()
 #addstr("hello world")
