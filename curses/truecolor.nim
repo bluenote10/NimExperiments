@@ -13,4 +13,5 @@ enableTrueColors()
 
 setForegroundColor colRed
 setBackgroundColor colGreen
+echo "Red on Green."
 styledEcho "Red on Green.", resetStyle
