@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 
+from __future__ import print_function
+
 import pandas as pd
 import numpy as np
 
-if True:
+if False:
     df = pd.DataFrame({
         "A": range(6),
         "B": range(3) * 2,
@@ -32,3 +34,31 @@ if False:
     print(subdf)
     print(df)
 
+if False:
+    a = np.array([1, 2, 3])
+    b = a
+    a[0] = 100
+    print("a = ", a)
+    print("b = ", b)
+
+    a = pd.Series([1, 2, 3])
+    b = a
+    a.ix[0] = 100
+    print("a = \n{}".format(a))
+    print("b = \n{}".format(b))
+
+if True:
+    a = np.array([1, 2, 3])
+
+    def test(a):
+        a[0] = 100
+
+    test(a)
+    print("a = ", a)
+
+    a = pd.Series([1, 2, 3])
+    def test(a):
+        a.ix[0] = 100
+
+    test(a)
+    print("a = \n{}".format(a))
