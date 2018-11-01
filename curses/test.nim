@@ -5,6 +5,7 @@ import sequtils
 import sugar
 import strformat
 import algorithm
+import times
 
 import terminal
 import colors
@@ -118,7 +119,21 @@ proc initWindow(): WindowPtr =
   return win
 
 
+proc getSize(window: WindowPtr): tuple[w: int, h: int] =
+  var w, h: int
+  window.getmaxyx(h, w)
+  return (w: w, h: h)
+
+
+proc getCursorPos(window: WindowPtr): tuple[x: int, y: int] =
+  var x, y: int
+  window.getyx(y, x)
+  return (x: x, y: y)
+
+
 proc drawFiles(window: WindowPtr, fileList: FileList) =
+  let windowSize = window.getSize()
+
   window.werase() # seems to be better the wclear
   window.wmove(0, 0)
   window.waddstr(&"{fileList.absPath}")
@@ -145,12 +160,22 @@ proc drawFiles(window: WindowPtr, fileList: FileList) =
       window.wattron(A_REVERSE)
 
     let filename = file.path.extractFilename
-    window.waddstr(&"{filename:-60s}\n")
+    let fileinfo = file.path.getFileInfo()
+    let accessTime = local(fileinfo.lastWriteTime).format("yyyy-MM-dd HH:mm:ss")
+    window.waddstr(&"{filename:-60s} {accessTime} {fileinfo.size:12d} \n")
 
     # restore attr
     window.wattroff(COLOR_PAIR(color))
     if i == fileList.highlighted:
       window.wattroff(A_REVERSE)
+
+    # break when cursor has moved to last line because of the newline
+    if window.getCursorPos().y == windowSize.h - 1:
+      break
+
+  window.wmove(windowSize.h - 1, 0)
+  window.waddstr(&"Number of files: {fileList.filesFiltered.len}")
+
   window.wrefresh()
 
 
