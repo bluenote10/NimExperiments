@@ -8,3 +8,5 @@ df_test
 *.csv
 *.so
 .changes
+
+nimdoc/test_nimdoc.html
