@@ -1,0 +1,25 @@
+filesets:
+  default:
+    include:
+      - ".watchcode.yaml"
+      - "*.nim"
+    exclude:
+      - ".watchcode.log"
+
+    exclude_gitignore: false
+    match_mode: "gitlike"
+
+tasks:
+  default:
+    fileset: default
+    commands:
+      #- "nim -r c ./bug_reports/report_2019_01_27_nnkExprEqExpr_not_working_in_macro.nim"
+      #- "nim c ./bug_reports/report_2019_01_29_table_constructor.nim"
+      - "nim -r c ./macros/array_type_unification.nim"
+    clear_screen: true
+    queue_events: false
+
+default_task: default
+log: true
+sound: true
+notifications: true

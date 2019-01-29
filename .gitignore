@@ -10,3 +10,5 @@ df_test
 .changes
 
 nimdoc/test_nimdoc.html
+
+.watchcode.log
