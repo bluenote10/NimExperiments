@@ -15,7 +15,9 @@ tasks:
     commands:
       #- "nim -r c ./bug_reports/report_2019_01_27_nnkExprEqExpr_not_working_in_macro.nim"
       #- "nim c ./bug_reports/report_2019_01_29_table_constructor.nim"
-      - "nim -r c ./macros/array_type_unification.nim"
+      #- "nim -r c ./macros/array_type_unification.nim"
+      #- "nim -r c ./visibility/user.nim"
+      - "nim -r js ./js_experiments/exceptions.nim"
     clear_screen: true
     queue_events: false
 
