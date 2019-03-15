@@ -7,10 +7,12 @@ type
     b: int
 
 proc newElementA(): ElementA =
-  newElement("A"): ElementA(a: 1)
+  newElement("A", ElementA(a: 1))
+  #newElement(ElementA, id="A", a=1)
 
 proc newElementB(): ElementB =
-  newElement("B"): ElementB(b: 2)
+  newElement("B", ElementB(b: 2))
+  #newElement(ElementB, id="A", b=2)
 
 let elements = @[
   newElementA().Element,

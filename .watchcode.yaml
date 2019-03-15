@@ -17,7 +17,10 @@ tasks:
       #- "nim c ./bug_reports/report_2019_01_29_table_constructor.nim"
       #- "nim -r c ./macros/array_type_unification.nim"
       #- "nim -r c ./visibility/user.nim"
-      - "nim -r js ./js_experiments/exceptions.nim"
+      #- "nim -r js ./js_experiments/exceptions.nim"
+      # - "nim -r c ./bug_reports/report_2019_03_15_error_proc_in_constructor.nim"
+      #- "nim -r js -d:release ./js_experiments/inheritance.nim"
+      - "nim -r js -d:release ./js_experiments/multi_event_handlers.nim"
     clear_screen: true
     queue_events: false
 
