@@ -12,3 +12,5 @@ df_test
 nimdoc/test_nimdoc.html
 
 .watchcode.log
+
+*.js
