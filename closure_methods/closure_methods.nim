@@ -105,7 +105,10 @@ macro class*(definition, body: untyped): untyped =
   # Return type is at: FormalParams at index 3, return type at index 0.
   # Note that we have to use the original definition node, not just
   # the identClass, because we need a BracketExpr in case of generics.
-  constructorDef[3][0] = definition
+  # For now we make the injection optional, because of a macro bug
+  # in Nim that prevents injecting the type with generics.
+  if constructorDef[3][0].kind == nnkEmpty:
+    constructorDef[3][0] = definition
 
   # Assembly class body
   let procBody = newStmtList()
