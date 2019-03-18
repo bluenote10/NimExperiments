@@ -1,6 +1,6 @@
 import closure_methods
 
-class(Base):
+class(Base, RootObj):
   constructor:
     proc newBase*(xInit: int = 10)
 
@@ -21,7 +21,12 @@ echo b.getState()
 echo b.getState()
 
 
-class(Sub of Base):
+#iterateFields(Base)
+#my(Base)
+
+
+class(Sub of Base, Base):
+  let base = newBase()
   constructor:
     proc newSub*(xInit: int)
 

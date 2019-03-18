@@ -1,5 +1,11 @@
 import macros
 import strformat
+import options
+
+
+iterator items*[T](o: Option[T]): T =
+  if o.isSome:
+    yield o.get
 
 
 type
@@ -52,6 +58,19 @@ proc findBlock(n: NimNode, name: string): NimNode =
   return found[0][1]
 
 
+proc findBlockOpt(n: NimNode, name: string): Option[NimNode] =
+  var found = newSeq[NimNode]()
+  for child in n:
+    if child.kind == nnkCall and child[0].kind == nnkIdent and child[0].strVal == name:
+      found.add(child)
+  if found.len > 1:
+    error &"There are {found.len} sections of type '{name}'; only zero/one sections allowed."
+  elif found.len == 0:
+    return none(NimNode)
+  else:
+    return some(found[0][1])
+
+
 proc convertProcdefIntoField(procdef: NimNode): NimNode =
   # We need to turn funcName into funcName* for export
   let procIdent = procdef[0]
@@ -84,7 +103,37 @@ proc parseProcDefs(n: NimNode): (NimNode, seq[NimNode]) =
   return (nCopy, exportedMethods)
 
 
-macro class*(definition, body: untyped): untyped =
+macro my*(t: typedesc): untyped =
+  #echo t.treeRepr
+  echo "1: ", t.getTypeInst.treeRepr
+  echo "2: ", t.getTypeInst[1].symbol.getImpl.treeRepr
+
+
+#[
+macro iterateFields*(t: typedesc): untyped =
+  echo "--------------------------------"
+
+  # check type of t
+  let tNode: NimNode = t
+  echo t.treeRepr
+  var tTypeImpl = getTypeImpl(t[1])
+  echo tTypeImpl.len
+  echo tTypeImpl.kind
+  echo tTypeImpl.typeKind
+  echo tTypeImpl.treeRepr
+
+  echo "--------------------------------"
+  error "here"
+]#
+
+
+proc classImpl(definition, base, body: NimNode): NimNode =
+
+  # echo getType(base).treerepr
+  # echo getTypeInst(base).treerepr
+  # echo getTypeImpl(base).treerepr
+  # echo base.getTypeInst[1].symbol.getImpl.treeRepr
+
   result = newStmtList()
   echo definition.treeRepr
   echo body.treeRepr
@@ -96,6 +145,23 @@ macro class*(definition, body: untyped): untyped =
   let constructorBlock = findBlock(body, "constructor")
   let varsBlock = findBlock(body, "vars")
   let procsBlock = findBlock(body, "procs")
+  let baseBlockOpt = findBlockOpt(body, "base")
+
+  # get base TypeDef
+  let baseTypeDef = base.getTypeInst[1].symbol.getImpl
+  echo baseTypeDef.treeRepr
+  let baseObjectTy = baseTypeDef[2][0]
+  let baseRecList = if baseObjectTy.len >= 3: baseObjectTy[2] else: newEmptyNode()
+  var baseMethods = newSeq[string]()
+  for identDef in baseRecList:
+    if identDef.kind == nnkIdentDefs:
+      let nameNode = identDef[0]
+      let typeNode = identDef[1]
+      if nameNode.kind == nnkPostfix and nameNode.len == 2: # because of export * symbol
+        baseMethods.add(nameNode[1].strVal)
+        echo nameNode[1].strVal
+    else:
+      error &"Expected nnkIdentDefs, got {identDef.repr}"
 
   # create type fields from exported methods
   let (procsBlockTransformed, exportedMethods) = parseProcDefs(procsBlock)
@@ -137,6 +203,11 @@ macro class*(definition, body: untyped): untyped =
 
   # Assembly class body
   let procBody = newStmtList()
+  for baseBlock in baseBlockOpt:
+    let baseValue = baseBlock[0]
+    procBody.add(newNimNode(nnkLetSection).add(
+      newIdentDefs(ident "base", newEmptyNode(), baseValue)
+    ))
   for statement in varsBlock:
     procBody.add(statement)
   for statement in procsBlockTransformed:
@@ -152,6 +223,15 @@ macro class*(definition, body: untyped): untyped =
       exportedMethodIdent,
       exportedMethodIdent
     ))
+  for baseMethod in baseMethods:
+    let exportedMethodIdent = ident(baseMethod)
+    let exportedMethodValue = newDotExpr(ident "base", ident(baseMethod))
+    # add the `method: method` expression
+    returnValue.add(newNimNode(nnkExprColonExpr).add(
+      exportedMethodIdent,
+      exportedMethodValue
+    ))
+
   procBody.add(returnValue)
 
   # Add the class body
@@ -162,3 +242,15 @@ macro class*(definition, body: untyped): untyped =
 
   echo result.repr
   #echo result.treeRepr
+
+
+#[
+macro class*(definition: untyped, body: untyped): untyped =
+  let base = newEmptyNode()
+  result = classImpl(definition, base, body)
+]#
+
+macro class*(definition: untyped, base: typed, body: untyped): untyped =
+  #echo "1: ", base.getTypeInst.treeRepr
+  #echo "2: ", base.getTypeInst[1].symbol.getImpl.treeRepr
+  result = classImpl(definition, base, body)
