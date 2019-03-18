@@ -15,18 +15,13 @@ class(Base, RootObj):
       inc()
       x
 
-
-let b = newBase()
-echo b.getState()
-echo b.getState()
-
-
-#iterateFields(Base)
-#my(Base)
+block:
+  let b = newBase()
+  echo b.getState()
+  echo b.getState()
 
 
 class(Sub of Base, Base):
-  let base = newBase()
   constructor:
     proc newSub*(xInit: int)
 
@@ -40,7 +35,30 @@ class(Sub of Base, Base):
     proc subProc*(): string =
       x
 
-let s = newSub(20)
-echo s.getState()
-echo s.getState()
-echo s.subProc()
+block:
+  let s = newSub(20)
+  echo s.getState()
+  echo s.getState()
+  echo s.subProc()
+
+
+class(SubSub of Sub, Sub):
+  constructor:
+    proc newSubSub*()
+
+  base:
+    newSub(30)
+
+  vars:
+    var x = "subsub"
+
+  procs:
+    proc subSubProc*(): string =
+      x
+
+block:
+  let s = newSubSub()
+  echo s.getState()
+  echo s.getState()
+  echo s.subProc()
+  echo s.subSubProc()

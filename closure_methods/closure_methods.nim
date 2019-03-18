@@ -103,28 +103,27 @@ proc parseProcDefs(n: NimNode): (NimNode, seq[NimNode]) =
   return (nCopy, exportedMethods)
 
 
-macro my*(t: typedesc): untyped =
-  #echo t.treeRepr
-  echo "1: ", t.getTypeInst.treeRepr
-  echo "2: ", t.getTypeInst[1].symbol.getImpl.treeRepr
+proc extractBaseMethods(baseSymbol: NimNode, baseMethods: var seq[string]) =
+  let baseTypeDef = baseSymbol.symbol.getImpl
+  let baseObjectTy = baseTypeDef[2][0]
+  echo baseTypeDef.treeRepr
 
+  # inheritance is at ObjectTy index 1 -- recursve over parents
+  if baseObjectTy.len >= 1 and baseObjectTy[1].kind == nnkOfInherit:
+    let baseBaseSymbol = baseObjectTy[1][0]
+    extractBaseMethods(baseBaseSymbol, baseMethods)
 
-#[
-macro iterateFields*(t: typedesc): untyped =
-  echo "--------------------------------"
-
-  # check type of t
-  let tNode: NimNode = t
-  echo t.treeRepr
-  var tTypeImpl = getTypeImpl(t[1])
-  echo tTypeImpl.len
-  echo tTypeImpl.kind
-  echo tTypeImpl.typeKind
-  echo tTypeImpl.treeRepr
-
-  echo "--------------------------------"
-  error "here"
-]#
+  # reclist is at ObjectTy index 2
+  let baseRecList = if baseObjectTy.len >= 3: baseObjectTy[2] else: newEmptyNode()
+  for identDef in baseRecList:
+    if identDef.kind == nnkIdentDefs:
+      let nameNode = identDef[0]
+      let typeNode = identDef[1]
+      if nameNode.kind == nnkPostfix and nameNode.len == 2: # because of export * symbol
+        baseMethods.add(nameNode[1].strVal)
+        echo nameNode[1].strVal
+    else:
+      error &"Expected nnkIdentDefs, got {identDef.repr}"
 
 
 proc classImpl(definition, base, body: NimNode): NimNode =
@@ -148,20 +147,11 @@ proc classImpl(definition, base, body: NimNode): NimNode =
   let baseBlockOpt = findBlockOpt(body, "base")
 
   # get base TypeDef
-  let baseTypeDef = base.getTypeInst[1].symbol.getImpl
-  echo baseTypeDef.treeRepr
-  let baseObjectTy = baseTypeDef[2][0]
-  let baseRecList = if baseObjectTy.len >= 3: baseObjectTy[2] else: newEmptyNode()
+  echo base.getTypeInst[1].symbol.getImpl.treeRepr
+  let baseSymbol = base.getTypeInst[1]
+  let baseTypeDef = baseSymbol.symbol.getImpl
   var baseMethods = newSeq[string]()
-  for identDef in baseRecList:
-    if identDef.kind == nnkIdentDefs:
-      let nameNode = identDef[0]
-      let typeNode = identDef[1]
-      if nameNode.kind == nnkPostfix and nameNode.len == 2: # because of export * symbol
-        baseMethods.add(nameNode[1].strVal)
-        echo nameNode[1].strVal
-    else:
-      error &"Expected nnkIdentDefs, got {identDef.repr}"
+  extractBaseMethods(baseSymbol, baseMethods)
 
   # create type fields from exported methods
   let (procsBlockTransformed, exportedMethods) = parseProcDefs(procsBlock)
