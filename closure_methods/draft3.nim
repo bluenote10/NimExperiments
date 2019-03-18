@@ -1,15 +1,11 @@
 import closure_methods
 
 class(Base):
-  type
-    Base = ref object of RootObj
-      getState: proc(x: int): int
-
   constructor:
-    proc newBase(xInit: int = 10)
+    proc newBase*(xInit: int = 10)
 
   vars:
-    var x = 0
+    var x = xInit
 
   procs:
     proc inc() =
@@ -18,3 +14,28 @@ class(Base):
     proc getState*(): int =
       inc()
       x
+
+
+let b = newBase()
+echo b.getState()
+echo b.getState()
+
+
+class(Sub of Base):
+  constructor:
+    proc newSub*(xInit: int)
+
+  base:
+    newBase(xInit)
+
+  vars:
+    var x = "state"
+
+  procs:
+    proc subProc*(): string =
+      x
+
+let s = newSub(20)
+echo s.getState()
+echo s.getState()
+echo s.subProc()

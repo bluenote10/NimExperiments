@@ -2,9 +2,19 @@ import macros
 import strformat
 
 
-proc parseDefinition(n: NimNode): tuple[identClass: NimNode, genericParams: NimNode] =
+type
+  ClassDef = ref object
+    rawClassDef: NimNode
+    identClass: NimNode
+    genericParams: NimNode
+    identBaseClass: NimNode
+
+
+proc parseClassName(classDef: ClassDef, n: NimNode) =
+  ## Helper function to split the class ident from generic params
   if n.kind == nnkIdent:
-    return (n, newEmptyNode())
+    classDef.identClass = n
+    classDef.genericParams = newEmptyNode()
   elif n.kind == nnkBracketExpr:
     let identClass = n[0]
     let genericParams = newNimNode(nnkGenericParams)
@@ -12,9 +22,22 @@ proc parseDefinition(n: NimNode): tuple[identClass: NimNode, genericParams: NimN
       genericParams.add(
         newIdentDefs(n[i], newEmptyNode(), newEmptyNode())
       )
-    return (identClass, genericParams)
+    classDef.identClass = identClass
+    classDef.genericParams = genericParams
   else:
     error &"Cannot parse class definition: {n.repr}"
+
+
+proc parseDefinition(n: NimNode): ClassDef =
+  result = ClassDef()
+  if n.kind == nnkInfix and n[0].strVal == "of":
+    result.rawClassDef = n[1]
+    result.parseClassName(n[1])
+    result.identBaseClass = n[2]
+  else:
+    result.rawClassDef = n
+    result.parseClassName(n)
+    result.identBaseClass = ident "RootObj"
 
 
 proc findBlock(n: NimNode, name: string): NimNode =
@@ -30,14 +53,17 @@ proc findBlock(n: NimNode, name: string): NimNode =
 
 
 proc convertProcdefIntoField(procdef: NimNode): NimNode =
-  result = newIdentDefs(
-    procdef[0],
-    newNimNode(nnkProcTy).add(
-      procdef[3], # copy formal params
-      newEmptyNode(),
-    )
+  # We need to turn funcName into funcName* for export
+  let procIdent = procdef[0]
+  let field = newNimNode(nnkPostfix).add(
+    ident "*",
+    procIdent,
   )
-
+  let fieldType = newNimNode(nnkProcTy).add(
+    procdef[3], # copy formal params
+    newEmptyNode(),
+  )
+  result = newIdentDefs(field, fieldType)
 
 
 proc parseProcDefs(n: NimNode): (NimNode, seq[NimNode]) =
@@ -64,15 +90,14 @@ macro class*(definition, body: untyped): untyped =
   echo body.treeRepr
 
   # extract infos from definition
-  let parsedDefinition = parseDefinition(definition)
-  let identClass = parsedDefinition.identClass
-  let identInheritFrom = ident"RootObj"
+  let classDef = parseDefinition(definition)
 
   # extract blocks and fields
   let constructorBlock = findBlock(body, "constructor")
   let varsBlock = findBlock(body, "vars")
   let procsBlock = findBlock(body, "procs")
 
+  # create type fields from exported methods
   let (procsBlockTransformed, exportedMethods) = parseProcDefs(procsBlock)
   let fields =
     if exportedMethods.len == 0:
@@ -86,13 +111,13 @@ macro class*(definition, body: untyped): untyped =
   # build type section
   let typeSection = newNimNode(nnkTypeSection)
   let typeDef = newNimNode(nnkTypeDef).add(
-    parsedDefinition.identClass,
-    parsedDefinition.genericParams,
+    classDef.identClass,
+    classDef.genericParams,
     newNimNode(nnkRefTy).add(
       newNimNode(nnkObjectTy).add(
         newEmptyNode(),
         newNimNode(nnkOfInherit).add(
-          identInheritFrom
+          classDef.identBaseClass
         ),
         fields,
       )
@@ -108,7 +133,7 @@ macro class*(definition, body: untyped): untyped =
   # For now we make the injection optional, because of a macro bug
   # in Nim that prevents injecting the type with generics.
   if constructorDef[3][0].kind == nnkEmpty:
-    constructorDef[3][0] = definition
+    constructorDef[3][0] = classDef.rawClassDef
 
   # Assembly class body
   let procBody = newStmtList()
@@ -119,9 +144,9 @@ macro class*(definition, body: untyped): untyped =
 
   # Add final object constructor as return value of procBody
   let returnValue = newNimNode(nnkObjConstr)
-  returnValue.add(definition)    # the return type -- we again need the BracketExpr for generics
+  returnValue.add(classDef.rawClassDef)    # the return type -- we again need the BracketExpr for generics
   for exportedMethod in exportedMethods:
-    let exportedMethodIdent = exportedMethod[0]
+    let exportedMethodIdent = exportedMethod[0][1]
     # add the `method: method` expression
     returnValue.add(newNimNode(nnkExprColonExpr).add(
       exportedMethodIdent,

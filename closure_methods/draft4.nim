@@ -21,7 +21,6 @@ echo(state)
 import closure_methods
 
 class(Base[T]):
-
   constructor:
     proc newBase[T](xInit: T = 10): Base[T]
 
