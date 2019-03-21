@@ -29,11 +29,11 @@ class(Sub of Base, Base):
     newBase(xInit)
 
   vars:
-    var x = "state"
+    var xState = "state"
 
   procs:
     proc subProc*(): string =
-      x
+      xState
 
 block:
   let s = newSub(20)

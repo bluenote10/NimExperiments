@@ -22,7 +22,7 @@ tasks:
       # - "nim -r c ./bug_reports/report_2019_03_17_macro_return_generic_object_constructor"
       #- "nim -r js -d:release ./js_experiments/inheritance.nim"
       #- "nim -r js -d:release ./js_experiments/multi_event_handlers.nim"
-      - "nim -r c ./closure_methods/draft3.nim"
+      - "nim -r c ./closure_methods/draft5.nim"
     clear_screen: true
     queue_events: false
 
