@@ -4,61 +4,60 @@ class(Base, RootObj):
   constructor:
     proc newBase*(xInit: int = 10)
 
-  vars:
-    var x = xInit
+  var x = xInit
 
-  procs:
-    proc inc() =
-      x += 1
+  proc inc() =
+    x += 1
 
-    proc getState*(): int =
-      inc()
-      x
+  proc getState*(): int =
+    inc()
+    x
 
 block:
   let b = newBase()
   echo b.getState()
   echo b.getState()
 
+when false:
+  class(Sub, Base):
+    constructor:
+      proc newSub*(xInit: int)
 
-class(Sub of Base, Base):
-  constructor:
-    proc newSub*(xInit: int)
+    base:
+      newBase(xInit)
 
-  base:
-    newBase(xInit)
+    vars:
+      var xState = "state"
 
-  vars:
-    var xState = "state"
+    procs:
+      proc subProc*(): string =
+        xState
 
-  procs:
-    proc subProc*(): string =
-      xState
-
-block:
-  let s = newSub(20)
-  echo s.getState()
-  echo s.getState()
-  echo s.subProc()
+  block:
+    let s = newSub(20)
+    echo s.getState()
+    echo s.getState()
+    echo s.subProc()
 
 
-class(SubSub of Sub, Sub):
-  constructor:
-    proc newSubSub*()
+when false:
+  class(SubSub, Sub):
+    constructor:
+      proc newSubSub*()
 
-  base:
-    newSub(30)
+    base:
+      newSub(30)
 
-  vars:
-    var x = "subsub"
+    vars:
+      var x = "subsub"
 
-  procs:
-    proc subSubProc*(): string =
-      x
+    procs:
+      proc subSubProc*(): string =
+        x
 
-block:
-  let s = newSubSub()
-  echo s.getState()
-  echo s.getState()
-  echo s.subProc()
-  echo s.subSubProc()
+  block:
+    let s = newSubSub()
+    echo s.getState()
+    echo s.getState()
+    echo s.subProc()
+    echo s.subSubProc()

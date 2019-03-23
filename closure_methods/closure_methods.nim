@@ -2,19 +2,54 @@ import macros
 import strformat
 import options
 
+#[
+static:
+  proc test(nodeKind: NimNodeKind, s: set[NimNodeKind]) =
+    echo s.contains(nodeKind)
+
+  let s = {nnkProcDef, nnkLambda}
+  echo s.contains(nnkEmpty)
+  test(nnkEmpty, s)
+]#
+
+# -----------------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------------
 
 iterator items*[T](o: Option[T]): T =
   if o.isSome:
     yield o.get
 
 
+proc expectKinds*(n: NimNode, kinds: set[NimNodeKind]) {.compileTime.} =
+  ## checks that `n` is of kind `k`. If this is not the case,
+  ## compilation aborts with an error message. This is useful for writing
+  ## macros that check the AST that is passed to them.
+  if not kinds.contains(n.kind): error("Expected a node of kinds " & $kinds & ", got " & $n.kind, n)
+
+proc procBody(n: NimNode): NimNode =
+  expectKinds n, {nnkProcDef, nnkLambda}
+  n[n.len - 1]
+
+proc `procBody=`(n: NimNode, other: NimNode) =
+  expectKinds n, {nnkProcDef, nnkLambda}
+  n[n.len - 1] = other
+
+proc formalParams(n: NimNode): NimNode =
+  expectKinds n, {nnkProcDef, nnkLambda}
+  n[3]
+
+
+# -----------------------------------------------------------------------------
+# Class parsing
+# -----------------------------------------------------------------------------
+
 type
   ClassDef = ref object
     rawClassDef: NimNode
     identClass: NimNode
     genericParams: NimNode
-    identBaseClass: NimNode
-
+    #identBaseClass: NimNode
 
 proc parseClassName(classDef: ClassDef, n: NimNode) =
   ## Helper function to split the class ident from generic params
@@ -39,11 +74,12 @@ proc parseDefinition(n: NimNode): ClassDef =
   if n.kind == nnkInfix and n[0].strVal == "of":
     result.rawClassDef = n[1]
     result.parseClassName(n[1])
-    result.identBaseClass = n[2]
+    #result.identBaseClass = n[2]
+    error "of syntax is deprecated"
   else:
     result.rawClassDef = n
     result.parseClassName(n)
-    result.identBaseClass = ident "RootObj"
+    #result.identBaseClass = ident "RootObj"
 
 
 proc findBlock(n: NimNode, name: string): NimNode =
@@ -71,7 +107,25 @@ proc findBlockOpt(n: NimNode, name: string): Option[NimNode] =
     return some(found[0][1])
 
 
-proc convertProcdefIntoField(procdef: NimNode): NimNode =
+# -----------------------------------------------------------------------------
+# Proc parsing
+# -----------------------------------------------------------------------------
+
+type
+  ParsedProc = ref object of RootObj
+
+  ExportedProc = ref object of ParsedProc
+    name: string
+    procDef: NimNode
+    isAbstract: bool
+    fieldDef: NimNode
+
+  PrivateProc = ref object of ParsedProc
+    name: string
+    procDef: NimNode
+
+
+proc convertProcDefIntoField(procdef: NimNode): NimNode =
   # We need to turn funcName into funcName* for export
   let procIdent = procdef[0]
   let field = newNimNode(nnkPostfix).add(
@@ -85,30 +139,31 @@ proc convertProcdefIntoField(procdef: NimNode): NimNode =
   result = newIdentDefs(field, fieldType)
 
 
-proc parseProcDefs(n: NimNode): (NimNode, seq[NimNode]) =
-  var nCopy = n.copyNimTree()
-  var exportedMethods = newSeq[NimNode]()
-
-  for procDef in nCopy:
-    if procDef.kind == nnkDiscardStmt:
-      continue
-    elif procDef.kind != nnkProcDef:
-      error &"Section 'procs' must only contain proc definitions, but got: {procDef.kind}"
-    else:
-      if procDef[0].kind == nnkPostfix and procDef[0][0].strVal == "*":
-        # get rid of postfix export "*"
-        procDef[0] = procDef[0][1]
-        exportedMethods.add(convertProcdefIntoField(procDef))
-
-  return (nCopy, exportedMethods)
+proc parseProcDef(procDef: NimNode): ParsedProc =
+  expectKind procDef, nnkProcDef
+  if procDef[0].kind == nnkPostfix and procDef[0][0].strVal == "*":
+    # get rid of postfix export "*"
+    let transformedProcDef = procDef.copyNimTree()
+    transformedProcDef[0] = procDef[0][1]
+    result = ExportedProc(
+      name: transformedProcDef[0].strVal,
+      procDef: transformedProcDef,
+      isAbstract: false,
+      fieldDef: convertProcDefIntoField(transformedProcDef)
+    )
+  else:
+    result = PrivateProc(
+      name: procDef[0].strVal,
+      procDef: procDef.copyNimTree(),
+    )
 
 
 proc extractBaseMethods(baseSymbol: NimNode, baseMethods: var seq[string]) =
   let baseTypeDef = baseSymbol.symbol.getImpl
   let baseObjectTy = baseTypeDef[2][0]
-  echo baseTypeDef.treeRepr
+  # echo baseTypeDef.treeRepr
 
-  # inheritance is at ObjectTy index 1 -- recursve over parents
+  # inheritance is at ObjectTy index 1 -- recurse over parents
   if baseObjectTy.len >= 1 and baseObjectTy[1].kind == nnkOfInherit:
     let baseBaseSymbol = baseObjectTy[1][0]
     extractBaseMethods(baseBaseSymbol, baseMethods)
@@ -125,6 +180,165 @@ proc extractBaseMethods(baseSymbol: NimNode, baseMethods: var seq[string]) =
     else:
       error &"Expected nnkIdentDefs, got {identDef.repr}"
 
+# -----------------------------------------------------------------------------
+# Body parsing
+# -----------------------------------------------------------------------------
+
+type
+  ParsedBody = ref object
+    baseCall: NimNode
+    exportedProcs: seq[ExportedProc]
+    privateProcs: seq[PrivateProc]
+    varDefs: seq[NimNode]
+
+
+proc parseBody(body: NimNode): ParsedBody =
+  result = ParsedBody()
+  for n in body:
+    if n.kind == nnkCall and n[0].strVal == "base":
+      result.baseCall = n.copyNimTree()
+    elif n.kind == nnkProcDef:
+      let parsedProc = parseProcDef(n)
+      if parsedProc of ExportedProc:
+        result.exportedProcs.add(parsedProc.ExportedProc)
+      elif parsedProc of PrivateProc:
+        result.privateProcs.add(parsedProc.PrivateProc)
+    elif {nnkVarSection, nnkLetSection, nnkConstSection}.contains(n.kind):
+      result.varDefs.add(n.copyNimTree())
+
+
+# -----------------------------------------------------------------------------
+# Assembly of output procs
+# -----------------------------------------------------------------------------
+
+proc newLambda(): NimNode =
+  newNimNode(nnkLambda).add(
+    newEmptyNode(),
+    newEmptyNode(),
+    newEmptyNode(),
+    newNimNode(nnkFormalParams),
+    newEmptyNode(),
+    newEmptyNode(),
+    newStmtList(),
+  )
+
+proc convertProcDefIntoLambda(n: NimNode): NimNode =
+  result = newLambda()
+  result[3] = n[3]
+  result[result.len - 1] = n[n.len - 1]
+  echo result.treeRepr
+
+proc assemblePatchProc(constructorDef: NimNode, classDef: ClassDef, parsedBody: ParsedBody): NimNode =
+  expectKind constructorDef, nnkProcDef
+
+  echo "constructorDef:\n", constructorDef.treeRepr
+
+  # Copy formal params of constructor def into the closure result type.
+  # Note that we only have to copy from child 1 onwards, because child
+  # 0 is the return type, and our function returns nothing
+  let ctorFormalParams = newNimNode(nnkFormalParams)
+  ctorFormalParams.add(newEmptyNode()) # void return type
+  let formalParamsConstructorDef = constructorDef[3]
+  for i in 1 ..< formalParamsConstructorDef.len:
+    ctorFormalParams.add(formalParamsConstructorDef[i])
+
+  let returnType = newNimNode(nnkProcTy).add(
+    ctorFormalParams,
+    newEmptyNode(),
+  )
+
+  # TODO needs to be made generic by copying generic params from constructor def
+  result = newProc(
+    ident "patch",
+    [returnType, newIdentDefs(ident "self", classDef.rawClassDef)],
+  )
+
+  let closure = newLambda()
+  closure[3] = ctorFormalParams
+
+  # build closure body
+
+  # 1. base def -- TODO
+
+  # 2. var defs
+  for varDef in parsedBody.varDefs:
+    closure.procBody.add(varDef)
+
+  # 3. private procs
+  for privateProc in parsedBody.privateProcs:
+    closure.procBody.add(
+      privateProc.procDef
+    )
+
+  # 4. exported procs
+  for exportedProc in parsedBody.exportedProcs:
+    closure.procBody.add(
+      newAssignment(
+        newDotExpr(ident "self", ident exportedProc.name),
+        convertProcDefIntoLambda(exportedProc.procDef),
+      )
+    )
+
+  let procBody = newStmtList()
+  procBody.add(
+    newAssignment(
+      ident "result",
+      closure,
+    )
+  )
+
+  # attach proc body
+  result[result.len - 1] = procBody
+
+  echo "patchProc:\n", result.treeRepr
+
+
+
+proc assembleNamedConstructor(constructorDef: NimNode, classDef: ClassDef): NimNode =
+  expectKind constructorDef, nnkProcDef
+  result = constructorDef.copyNimTree()
+  result.procBody = newStmtList()
+
+  # We inject the return type to the ctor proc as a convenience.
+  # Return type is at: FormalParams at index 3, return type at index 0.
+  # Note that we have to use the original definition node, not just
+  # the identClass, because we need a BracketExpr in case of generics.
+  # For now we make the injection optional, because of a macro bug
+  # in Nim that prevents injecting the type with generics.
+  if result[3][0].kind == nnkEmpty:
+    result[3][0] = classDef.rawClassDef
+
+  # construct self
+  result.procBody.add(
+    newLetStmt(
+      ident "self",
+      newCall(classDef.rawClassDef)
+    )
+  )
+
+  # patch from base type
+
+  # patch from self type
+  echo constructorDef.treeRepr
+  let patchCall = newCall(
+    newCall(
+      ident "patch",
+      ident "self",
+    )
+  )
+  for i in 1 ..< constructorDef.formalParams.len:
+    patchCall.add(constructorDef.formalParams[i][0])
+  result.procBody.add(
+    patchCall
+  )
+
+  # return expression
+  result.procBody.add(ident "self")
+
+
+# -----------------------------------------------------------------------------
+# Main class macro impl
+# -----------------------------------------------------------------------------
 
 proc classImpl(definition, base, body: NimNode): NimNode =
 
@@ -134,16 +348,17 @@ proc classImpl(definition, base, body: NimNode): NimNode =
   # echo base.getTypeInst[1].symbol.getImpl.treeRepr
 
   result = newStmtList()
+  echo "-----------------------------------------------------------------------"
   echo definition.treeRepr
   echo body.treeRepr
+  echo "-----------------------------------------------------------------------"
 
   # extract infos from definition
   let classDef = parseDefinition(definition)
 
   # extract blocks and fields
+  let parsedBody = parseBody(body)
   let constructorBlock = findBlock(body, "constructor")
-  let varsBlock = findBlock(body, "vars")
-  let procsBlock = findBlock(body, "procs")
   let baseBlockOpt = findBlockOpt(body, "base")
 
   # get base TypeDef
@@ -154,14 +369,13 @@ proc classImpl(definition, base, body: NimNode): NimNode =
   extractBaseMethods(baseSymbol, baseMethods)
 
   # create type fields from exported methods
-  let (procsBlockTransformed, exportedMethods) = parseProcDefs(procsBlock)
   let fields =
-    if exportedMethods.len == 0:
+    if parsedBody.exportedProcs.len == 0:
       newEmptyNode()
     else:
       let reclist = newNimNode(nnkRecList)
-      for exportedMethod in exportedMethods:
-        reclist.add(exportedMethod)
+      for exportedProc in parsedBody.exportedProcs:
+        reclist.add(exportedProc.fieldDef)
       reclist
 
   # build type section
@@ -173,7 +387,7 @@ proc classImpl(definition, base, body: NimNode): NimNode =
       newNimNode(nnkObjectTy).add(
         newEmptyNode(),
         newNimNode(nnkOfInherit).add(
-          classDef.identBaseClass
+          baseSymbol
         ),
         fields,
       )
@@ -191,7 +405,8 @@ proc classImpl(definition, base, body: NimNode): NimNode =
   if constructorDef[3][0].kind == nnkEmpty:
     constructorDef[3][0] = classDef.rawClassDef
 
-  # Assembly class body
+  #[
+  # Assemble class body
   let procBody = newStmtList()
   for baseBlock in baseBlockOpt:
     let baseValue = baseBlock[0]
@@ -226,9 +441,14 @@ proc classImpl(definition, base, body: NimNode): NimNode =
 
   # Add the class body
   constructorDef[constructorDef.len - 1] = procBody
+  ]#
+
+  let namedConstructorProc = assembleNamedConstructor(constructorDef, classDef)
+  let patchProc = assemblePatchProc(constructorDef, classDef, parsedBody)
 
   result.add(typeSection)
-  result.add(constructorDef)
+  result.add(patchProc)
+  result.add(namedConstructorProc)
 
   echo result.repr
   #echo result.treeRepr
@@ -244,3 +464,4 @@ macro class*(definition: untyped, base: typed, body: untyped): untyped =
   #echo "1: ", base.getTypeInst.treeRepr
   #echo "2: ", base.getTypeInst[1].symbol.getImpl.treeRepr
   result = classImpl(definition, base, body)
+
