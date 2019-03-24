@@ -297,7 +297,7 @@ proc convertProcDefIntoLambda(n: NimNode): NimNode =
   result[result.len - 1] = n[n.len - 1]
   echo result.treeRepr
 
-proc assemblePatchProc(constructorDef: NimNode, classDef: ClassDef, parsedBody: ParsedBody): NimNode =
+proc assemblePatchProc(constructorDef: NimNode, classDef: ClassDef, baseSymbol: NimNode, parsedBody: ParsedBody): NimNode =
   expectKind constructorDef, nnkProcDef
 
   echo "constructorDef:\n", constructorDef.treeRepr
@@ -327,7 +327,17 @@ proc assemblePatchProc(constructorDef: NimNode, classDef: ClassDef, parsedBody: 
 
   # build closure body
 
-  # 1. base def -- TODO
+  # 1. parent constructor impl call
+  for baseCall in parsedBody.baseCall:
+    let patchCallBase = newCall(
+      newCall(
+        ident "patch",
+        newCall(baseSymbol, ident "self"),
+      )
+    )
+    for arg in baseCall.args:
+      patchCallBase.add(arg)
+    closure.procBody.add(patchCallBase)
 
   # 2. var defs
   for varDef in parsedBody.varDefs:
@@ -363,7 +373,7 @@ proc assemblePatchProc(constructorDef: NimNode, classDef: ClassDef, parsedBody: 
 
 
 
-proc assembleNamedConstructor(constructorDef: NimNode, classDef: ClassDef, baseSymbol: NimNode, parsedBody: ParsedBody): NimNode =
+proc assembleNamedConstructor(constructorDef: NimNode, classDef: ClassDef, parsedBody: ParsedBody): NimNode =
   expectKind constructorDef, nnkProcDef
   result = constructorDef.copyNimTree()
   result.procBody = newStmtList()
@@ -385,19 +395,7 @@ proc assembleNamedConstructor(constructorDef: NimNode, classDef: ClassDef, baseS
     )
   )
 
-  # patch from base type
-  for baseCall in parsedBody.baseCall:
-    let patchCallBase = newCall(
-      newCall(
-        ident "patch",
-        newCall(baseSymbol, ident "self"),
-      )
-    )
-    for arg in baseCall.args:
-      patchCallBase.add(arg)
-    result.procBody.add(patchCallBase)
-
-  # patch from self type
+  # call constructor impl
   let patchCall = newCall(
     newCall(
       ident "patch",
@@ -519,8 +517,8 @@ proc classImpl(definition, base, body: NimNode): NimNode =
   constructorDef[constructorDef.len - 1] = procBody
   ]#
 
-  let namedConstructorProc = assembleNamedConstructor(constructorDef, classDef, baseSymbol, parsedBody)
-  let patchProc = assemblePatchProc(constructorDef, classDef, parsedBody)
+  let namedConstructorProc = assembleNamedConstructor(constructorDef, classDef, parsedBody)
+  let patchProc = assemblePatchProc(constructorDef, classDef, baseSymbol, parsedBody)
 
   result.add(typeSection)
   result.add(patchProc)

@@ -342,11 +342,15 @@ when true:
   proc patch[T](self: Sub[T]): proc(y: T) = # SubPatcher[T] =
     result = proc(y: T) =
       # order here would be
-      # - var base = ...
+      # - parent constructor call
+      # - var base = ... instance exposure with copying original method fields
+      # - variable definitions
       # - fwd decl of private procs
       # - decl of self templates
       # - decl of private procs
       # - assignment + impl of self procs
+      patch(self.Base)(20)
+
       template abstract() = self.abstract()
 
       var base = Base(abstract: self.abstract, templateMethod: self.templateMethod)
@@ -357,7 +361,6 @@ when true:
 
   proc newSub[T](y: T): Sub[T] =
     var self = Sub[T]()
-    patch(self.Base)(20)
     patch(self)(y)
     self
 
