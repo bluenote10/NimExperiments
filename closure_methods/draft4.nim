@@ -20,19 +20,17 @@ echo(state)
 
 import closure_methods
 
-class(Base[T]):
+class(Base[T], RootObj):
   constructor:
     proc newBase[T](xInit: T = 10): Base[T]
 
-  vars:
-    var x: T
+  var x: T
 
-  procs:
-    proc add*(add: T) =
-      x += add
+  proc add*(add: T) =
+    x += add
 
-    proc getState*(): T =
-      x
+  proc getState*(): T =
+    x
 
 let x = newBase[int](20)
 echo x.getState()

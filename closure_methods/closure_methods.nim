@@ -2,30 +2,6 @@ import macros
 import strformat
 import options
 
-#[
-static:
-  proc test(nodeKind: NimNodeKind, s: set[NimNodeKind]) =
-    echo s.contains(nodeKind)
-
-  let s = {nnkProcDef, nnkLambda}
-  echo s.contains(nnkEmpty)
-  test(nnkEmpty, s)
-]#
-
-when false:
-  macro test(n: untyped): untyped =
-    echo n.treeRepr
-
-  static:
-    test:
-      constructor(named) = proc (x: T = 10)
-      constructor = proc(x: T = 10)
-
-      #ctor[T](x: T = 10)
-
-      proc t[T](x: T = 10)
-
-    error("Tree dumped")
 
 # -----------------------------------------------------------------------------
 # Helpers
@@ -48,12 +24,26 @@ proc procBody(n: NimNode): NimNode =
 
 proc `procBody=`(n: NimNode, other: NimNode) =
   expectKinds n, {nnkProcDef, nnkLambda}
+  expectKind other, nnkStmtList
   n[n.len - 1] = other
-
+  
 proc formalParams(n: NimNode): NimNode =
   expectKinds n, {nnkProcDef, nnkLambda}
   n[3]
 
+proc `formalParams=`(n: NimNode, other: NimNode) =
+  expectKinds n, {nnkProcDef, nnkLambda}
+  expectKind other, nnkFormalParams
+  n[3] = other
+
+proc genericParams(n: NimNode): NimNode =
+  expectKinds n, {nnkProcDef}
+  n[2]
+
+proc `genericParams=`(n: NimNode, other: NimNode) =
+  expectKinds n, {nnkProcDef, nnkLambda}
+  expectKind other, nnkGenericParams
+  n[2] = other
 
 # -----------------------------------------------------------------------------
 # Class parsing
@@ -299,8 +289,7 @@ proc convertProcDefIntoLambda(n: NimNode): NimNode =
 
 proc assemblePatchProc(constructorDef: NimNode, classDef: ClassDef, baseSymbol: NimNode, parsedBody: ParsedBody): NimNode =
   expectKind constructorDef, nnkProcDef
-
-  echo "constructorDef:\n", constructorDef.treeRepr
+  # echo "constructorDef:\n", constructorDef.treeRepr
 
   # Copy formal params of constructor def into the closure result type.
   # Note that we only have to copy from child 1 onwards, because child
@@ -321,6 +310,9 @@ proc assemblePatchProc(constructorDef: NimNode, classDef: ClassDef, baseSymbol: 
     ident "patch",
     [returnType, newIdentDefs(ident "self", classDef.rawClassDef)],
   )
+  result.genericParams = newNimNode(nnkGenericParams)
+  for genericParam in classDef.genericParams:
+    result.genericParams.add(genericParam)
 
   let closure = newLambda()
   closure[3] = ctorFormalParams
@@ -367,8 +359,7 @@ proc assemblePatchProc(constructorDef: NimNode, classDef: ClassDef, baseSymbol: 
   )
 
   # attach proc body
-  result[result.len - 1] = procBody
-
+  result.procBody = procBody
   echo "patchProc:\n", result.treeRepr
 
 
@@ -539,3 +530,25 @@ macro class*(definition: untyped, base: typed, body: untyped): untyped =
   #echo "2: ", base.getTypeInst[1].symbol.getImpl.treeRepr
   result = classImpl(definition, base, body)
 
+
+when false:
+  # for quick tree dumps
+
+  macro test1(n: untyped): untyped =
+    echo n.treeRepr
+
+  macro test0(n: untyped): untyped =
+    discard
+
+  static:
+    test0:
+      constructor(named) = proc (x: T = 10)
+      constructor = proc(x: T = 10)
+      #ctor[T](x: T = 10)
+      proc t[T](x: T = 10)
+
+    test1:
+      proc patch[T](x: T) =
+        discard
+
+    error("Tree dumped")
