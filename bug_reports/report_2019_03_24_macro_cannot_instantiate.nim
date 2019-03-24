@@ -1,50 +1,35 @@
 import macros
 
-#[
-type
-  Base[T] = ref object of RootObj
-    add*: proc (add: T)
-    getState*: proc (): T
-
-proc patch[T](self: Base[T]): proc (xInit: T = 10) =
-  result = proc (xInit: T = 10) =
-    var x: T
-    self.add = proc (add: T) =
-      x += add
-    self.getState = proc (): T =
-      x
-
-proc newBase[T](xInit: T = 10): Base[T] =
-  let self = Base[T]()
-  patch(self)(xInit)
-  self
-]#
-
-
 type
   Base[T] = ref object
 
-dumpTree:
-  proc init[T](self: Base[T]) =
+dumpTree: # reference tree to be produced by macro below
+  proc clone[T](self: Base[T]): Base[T] =
     discard
 
-macro gen(t: untyped): untyped =
-  echo t.treeRepr
-  let genericParam = t[1] 
+macro genCloneProc(typeWithGenArg: untyped): untyped =
+  echo typeWithGenArg.treeRepr
+  # =>
+  #   BracketExpr
+  #     Ident "Base"
+  #     Ident "T"
   result = newProc(
-    ident "init",
-    [
-      newEmptyNode(), # void return type
+    ident "clone", [
+      typeWithGenArg, # return type: Base[T]
       newIdentDefs(
         ident "self",
-        t,
+        typeWithGenArg,
       )
     ],
-    newStmtList()
+    newStmtList(
+      newNimNode(nnkDiscardStmt).add(newEmptyNode())
+    )
   )
+  # set the generic param 
+  let genericParamIdent = typeWithGenArg[1] # the `T`
   result[2] = newNimNode(nnkGenericParams)
-  result[2].add(newIdentDefs(genericParam, newEmptyNode()))
+  result[2].add(newIdentDefs(genericParamIdent, newEmptyNode()))
   echo result.repr
   echo result.treeRepr
 
-gen(Base[T])
+genCloneProc(Base[T])
