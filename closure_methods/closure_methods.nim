@@ -174,7 +174,7 @@ proc parseProcDef(procDef: NimNode): ParsedProc =
 
 
 proc extractBaseMethods(baseSymbol: NimNode, baseMethods: var seq[string]) =
-  let baseTypeDef = baseSymbol.symbol.getImpl
+  let baseTypeDef = baseSymbol.getImpl
   let baseObjectTy = baseTypeDef[2][0]
   # echo baseTypeDef.treeRepr
 
@@ -223,13 +223,30 @@ proc parseConstructor(n: NimNode): ParsedConstructor =
   ParsedConstructor(name: name, args: args)
 
 # -----------------------------------------------------------------------------
+# Base call parsing
+# -----------------------------------------------------------------------------
+
+type
+  ParsedBaseCall = ref object
+    args: seq[NimNode]
+
+proc isBaseCall(n: NimNode): bool =
+  n.kind == nnkCall and n[0].strVal == "base"
+
+proc parseBaseCall(n: NimNode): ParsedBaseCall =
+  var args = newSeq[NimNode]()
+  for i in 1 ..< n.len:
+    args.add(n[i])
+  ParsedBaseCall(args: args)
+
+# -----------------------------------------------------------------------------
 # Body parsing
 # -----------------------------------------------------------------------------
 
 type
   ParsedBody = ref object
     ctor: Option[ParsedConstructor]
-    baseCall: NimNode
+    baseCall: Option[ParsedBaseCall]
     exportedProcs: seq[ExportedProc]
     privateProcs: seq[PrivateProc]
     varDefs: seq[NimNode]
@@ -239,21 +256,24 @@ proc parseBody(body: NimNode): ParsedBody =
     ctor: none(ParsedConstructor),
   )
   for n in body:
-    if n.kind == nnkCall and n[0].strVal == "base":
-      result.baseCall = n.copyNimTree()
+    if {nnkVarSection, nnkLetSection, nnkConstSection}.contains(n.kind):
+      result.varDefs.add(n.copyNimTree())
     elif n.kind == nnkProcDef:
       let parsedProc = parseProcDef(n)
       if parsedProc of ExportedProc:
         result.exportedProcs.add(parsedProc.ExportedProc)
       elif parsedProc of PrivateProc:
         result.privateProcs.add(parsedProc.PrivateProc)
-    elif {nnkVarSection, nnkLetSection, nnkConstSection}.contains(n.kind):
-      result.varDefs.add(n.copyNimTree())
     elif n.isConstructor():
       if result.ctor.isNone:
         result.ctor = some(n.parseConstructor())
       else:
         error "Class definition must have only one constructor"
+    elif n.isBaseCall():
+      if result.baseCall.isNone:
+        result.baseCall = some(n.parseBaseCall())
+      else:
+        error "Class definition must have only one base call"
 
 
 # -----------------------------------------------------------------------------
@@ -343,7 +363,7 @@ proc assemblePatchProc(constructorDef: NimNode, classDef: ClassDef, parsedBody: 
 
 
 
-proc assembleNamedConstructor(constructorDef: NimNode, classDef: ClassDef): NimNode =
+proc assembleNamedConstructor(constructorDef: NimNode, classDef: ClassDef, baseSymbol: NimNode, parsedBody: ParsedBody): NimNode =
   expectKind constructorDef, nnkProcDef
   result = constructorDef.copyNimTree()
   result.procBody = newStmtList()
@@ -366,9 +386,18 @@ proc assembleNamedConstructor(constructorDef: NimNode, classDef: ClassDef): NimN
   )
 
   # patch from base type
+  for baseCall in parsedBody.baseCall:
+    let patchCallBase = newCall(
+      newCall(
+        ident "patch",
+        newCall(baseSymbol, ident "self"),
+      )
+    )
+    for arg in baseCall.args:
+      patchCallBase.add(arg)
+    result.procBody.add(patchCallBase)
 
   # patch from self type
-  echo constructorDef.treeRepr
   let patchCall = newCall(
     newCall(
       ident "patch",
@@ -377,9 +406,7 @@ proc assembleNamedConstructor(constructorDef: NimNode, classDef: ClassDef): NimN
   )
   for i in 1 ..< constructorDef.formalParams.len:
     patchCall.add(constructorDef.formalParams[i][0])
-  result.procBody.add(
-    patchCall
-  )
+  result.procBody.add(patchCall)
 
   # return expression
   result.procBody.add(ident "self")
@@ -411,9 +438,9 @@ proc classImpl(definition, base, body: NimNode): NimNode =
   let baseBlockOpt = findBlockOpt(body, "base")
 
   # get base TypeDef
-  echo base.getTypeInst[1].symbol.getImpl.treeRepr
-  let baseSymbol = base.getTypeInst[1]
-  let baseTypeDef = baseSymbol.symbol.getImpl
+  let baseSymbol = base.getTypeInst[1]  # because its a typedesc, the type symbol is child 1
+
+  # recursive extraction of all base methods
   var baseMethods = newSeq[string]()
   extractBaseMethods(baseSymbol, baseMethods)
 
@@ -492,7 +519,7 @@ proc classImpl(definition, base, body: NimNode): NimNode =
   constructorDef[constructorDef.len - 1] = procBody
   ]#
 
-  let namedConstructorProc = assembleNamedConstructor(constructorDef, classDef)
+  let namedConstructorProc = assembleNamedConstructor(constructorDef, classDef, baseSymbol, parsedBody)
   let patchProc = assemblePatchProc(constructorDef, classDef, parsedBody)
 
   result.add(typeSection)

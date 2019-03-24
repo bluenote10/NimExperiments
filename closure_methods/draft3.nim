@@ -21,20 +21,17 @@ block:
   echo b.getState()
   echo b.getState()
 
-when false:
+when true:
   class(Sub, Base):
     constructor:
       proc newSub*(xInit: int)
 
-    base:
-      newBase(xInit)
+    base(xInit)
 
-    vars:
-      var xState = "state"
+    var xState = "state"
 
-    procs:
-      proc subProc*(): string =
-        xState
+    proc subProc*(): string =
+      xState
 
   block:
     let s = newSub(20)
@@ -43,20 +40,17 @@ when false:
     echo s.subProc()
 
 
-when false:
+when true:
   class(SubSub, Sub):
     constructor:
       proc newSubSub*()
 
-    base:
-      newSub(30)
+    base(30)
 
-    vars:
-      var x = "subsub"
+    var x = "subsub"
 
-    procs:
-      proc subSubProc*(): string =
-        x
+    proc subSubProc*(): string =
+      x
 
   block:
     let s = newSubSub()
