@@ -12,6 +12,21 @@ static:
   test(nnkEmpty, s)
 ]#
 
+when false:
+  macro test(n: untyped): untyped =
+    echo n.treeRepr
+
+  static:
+    test:
+      constructor(named) = proc (x: T = 10)
+      constructor = proc(x: T = 10)
+
+      #ctor[T](x: T = 10)
+
+      proc t[T](x: T = 10)
+
+    error("Tree dumped")
+
 # -----------------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------------
@@ -181,19 +196,48 @@ proc extractBaseMethods(baseSymbol: NimNode, baseMethods: var seq[string]) =
       error &"Expected nnkIdentDefs, got {identDef.repr}"
 
 # -----------------------------------------------------------------------------
+# Constructor parsing
+# -----------------------------------------------------------------------------
+
+type
+  ParsedConstructor = ref object
+    name: Option[string]
+    args: seq[NimNode]
+
+proc isConstructor(n: NimNode): bool =
+  n.kind == nnkAsgn and (
+    (n[0].kind == nnkIdent and n[0].strVal == "constructor") or
+    (n[0].kind == nnkCall and n[0][0].kind == nnkIdent and n[0][0].strVal == "constructor")
+  )
+
+proc parseConstructor(n: NimNode): ParsedConstructor =
+  let name =
+    if n.kind == nnkCall:
+      some(n[1].strVal)
+    else:
+      none(string)
+  var args = newSeq[NimNode]()
+  let formalParams = n[1][0]
+  for i in 1 ..< formalParams.len:
+    args.add(formalParams[i])
+  ParsedConstructor(name: name, args: args)
+
+# -----------------------------------------------------------------------------
 # Body parsing
 # -----------------------------------------------------------------------------
 
 type
   ParsedBody = ref object
+    ctor: Option[ParsedConstructor]
     baseCall: NimNode
     exportedProcs: seq[ExportedProc]
     privateProcs: seq[PrivateProc]
     varDefs: seq[NimNode]
 
-
 proc parseBody(body: NimNode): ParsedBody =
-  result = ParsedBody()
+  result = ParsedBody(
+    ctor: none(ParsedConstructor),
+  )
   for n in body:
     if n.kind == nnkCall and n[0].strVal == "base":
       result.baseCall = n.copyNimTree()
@@ -205,6 +249,11 @@ proc parseBody(body: NimNode): ParsedBody =
         result.privateProcs.add(parsedProc.PrivateProc)
     elif {nnkVarSection, nnkLetSection, nnkConstSection}.contains(n.kind):
       result.varDefs.add(n.copyNimTree())
+    elif n.isConstructor():
+      if result.ctor.isNone:
+        result.ctor = some(n.parseConstructor())
+      else:
+        error "Class definition must have only one constructor"
 
 
 # -----------------------------------------------------------------------------

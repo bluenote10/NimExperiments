@@ -1,6 +1,9 @@
 import closure_methods
 
 class(Base, RootObj):
+  #constructor(newBase) = 
+  #  proc(xInit: int = 10)
+
   constructor:
     proc newBase*(xInit: int = 10)
 
