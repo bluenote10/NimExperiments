@@ -1,0 +1,23 @@
+filesets:
+  default:
+    include:
+      - ".watchcode.yaml"
+      - "*.nim"
+      - "*.js"
+    exclude:
+      - "dist/main.js"
+      - ".watchcode.log"
+
+    exclude_gitignore: false
+    match_mode: "gitlike"
+
+tasks:
+  default:
+    fileset: default
+    commands:
+      - "npx babel src -d dist && node ./dist/main.js"
+
+default_task: default
+log: true
+sound: false
+notifications: true
