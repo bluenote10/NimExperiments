@@ -1,0 +1,23 @@
+{
+  "name": "surplustest",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "surplus-loader": "^0.5.0",
+    "surplus-mixin-data": "^0.5.0",
+    "webpack": "^4.30.0",
+    "webpack-cli": "^3.3.2"
+  },
+  "dependencies": {
+    "s-array": "^0.4.10",
+    "s-js": "^0.4.9",
+    "surplus": "^0.5.3"
+  }
+}
