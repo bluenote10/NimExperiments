@@ -1,34 +1,37 @@
-import { el, mount, list } from 'redom';
+import { el, mount, list, List } from 'redom';
 
 console.log(el);
 
 class Td {
-  el: any;
+  el: HTMLElement;
+
   constructor () {
     this.el = el('td');
   }
-  update(value) {
+
+  update(value: string) {
     this.el.textContent = value;
   }
 }
 
 class Tr {
-  el: any;
-  list: any;
+  el: HTMLElement;
+  list: List;
 
   constructor () {
     this.list = list('tr', Td);
     this.el = this.list.el;
   }
-  update (values) {
+
+  update(values: string[]) {
     this.list.update(values);
   }
 }
 
 
 export class TableWidget {
-  table: any;
-  el: any;
+  el: HTMLElement;
+  table: List;
 
   constructor() {
     this.table = list('table', Tr);
@@ -38,7 +41,7 @@ export class TableWidget {
     ])
   }
 
-  update(data) {
+  update(data: any) {
     console.log(data);
     const numCols = data.length;
     const numRows = data[0].values.length;
