@@ -4,6 +4,7 @@ filesets:
       - ".watchcode.yaml"
       - "*.nim"
       - "*.js"
+      - "*.ts"
     exclude:
       - "dist/main.js"
       - ".watchcode.log"

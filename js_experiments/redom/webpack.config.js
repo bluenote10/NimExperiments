@@ -1,7 +1,7 @@
 const path = require('path');
 
 module.exports = {
-  entry: './src/main.js',
+  entry: './src/main.ts',
   devtool : 'source-map',
   mode: 'development',
   output: {
@@ -10,9 +10,11 @@ module.exports = {
   },
   module: {
     rules: [
-      // if just using javascript
-      //{ test: /\.jsx$/, loader: 'surplus-loader' },
+      { test: /\.tsx?$/, loader: 'ts-loader' }
     ]
+  },
+  resolve: {
+      extensions: [ '.ts', '.tsx', '.js' ]
   },
 	optimization: {
 		// We no not want to minimize our code.
