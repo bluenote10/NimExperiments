@@ -1,0 +1,18 @@
+{
+  "name": "redomtest",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "redom": "^3.20.0",
+    "webpack": "^4.30.0",
+    "webpack-cli": "^3.3.2"
+  },
+  "dependencies": {}
+}
